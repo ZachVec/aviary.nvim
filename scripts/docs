@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd -- "$(dirname -- "$0")/.."
+
+# Local generation and CI use the same tested tool versions.
+source scripts/docs-tools.env
+if [[ "$(pandoc --version | head -n 1)" != "pandoc $PANDOC_VERSION" ]]; then
+  echo "Vimdoc generation requires Pandoc $PANDOC_VERSION." >&2
+  exit 1
+fi
+
+# PANVIMDOC_DIR may select an existing, unmodified checkout of the pinned writer.
+tool_dir="${PANVIMDOC_DIR:-.tools/panvimdoc}"
+if [[ ! -d "$tool_dir" ]]; then
+  git init --quiet "$tool_dir"
+  git -C "$tool_dir" remote add origin https://github.com/kdheepak/panvimdoc.git
+  git -C "$tool_dir" fetch --depth 1 origin "$PANVIMDOC_REVISION"
+  git -C "$tool_dir" checkout --quiet --detach FETCH_HEAD
+fi
+if [[ "$(git -C "$tool_dir" rev-parse HEAD)" != "$PANVIMDOC_REVISION" ]] ||
+  ! git -C "$tool_dir" diff --quiet HEAD --; then
+  echo "PANVIMDOC_DIR must contain an unmodified checkout of $PANVIMDOC_REVISION." >&2
+  exit 1
+fi
+
+# Publish the complete set only after every manual has generated successfully.
+output_dir="$(mktemp -d)"
+trap 'rm -rf -- "$output_dir"' EXIT
+shopt -s nullglob
+for source in README.md docs/*.md; do
+  if [[ "$source" == README.md ]]; then
+    name=aviary
+  else
+    name="$(basename -- "$source" .md)"
+  fi
+  if [[ ! "$name" =~ ^[a-zA-Z0-9_-]+$ ]] || [[ -e "$output_dir/$name.nvim.txt" ]]; then
+    echo "Invalid or duplicate Vimdoc name: $name" >&2
+    exit 1
+  fi
+  pandoc "$source" \
+    --lua-filter=scripts/vimdoc.lua \
+    --shift-heading-level-by=-1 \
+    --metadata="project:$name.nvim" \
+    --metadata="description:$name · aviary.nvim" \
+    --metadata=incrementheadinglevelby:0 \
+    --metadata=toc:true \
+    --metadata=treesitter:true \
+    --metadata=dedupsubheadings:true \
+    --metadata=ignorerawblocks:true \
+    --metadata=nodate:true \
+    --metadata=novimversion:true \
+    --to="$tool_dir/scripts/panvimdoc.lua" \
+    --output="$output_dir/$name.nvim.txt"
+done
+
+mkdir -p doc
+for previous in doc/*.nvim.txt; do
+  if [[ ! -f "$output_dir/${previous##*/}" ]]; then
+    rm -- "$previous"
+  fi
+done
+cp -- "$output_dir"/*.nvim.txt doc/

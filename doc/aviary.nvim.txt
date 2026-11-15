@@ -1,0 +1,167 @@
+*aviary.nvim.txt*                                        aviary · aviary.nvim
+
+==============================================================================
+Table of Contents                              *aviary.nvim-table-of-contents*
+
+1. Requirements                                     |aviary.nvim-requirements|
+2. Installation                                     |aviary.nvim-installation|
+3. Default Options                               |aviary.nvim-default-options|
+4. License                                               |aviary.nvim-license|
+*aviary.nvim*
+
+aviary.nvim
+
+Review Git changes, annotate code, and compose text for the clipboard or tmux.
+
+  -----------------------------------------------------------------------
+  Feature                             Use it for
+  ----------------------------------- -----------------------------------
+  hawk |hawk.nvim|                    Review repository changes and
+                                      manage session comments.
+
+  pigeon |pigeon.nvim|                Export templates, file/buffer
+                                      references, and selected text.
+  -----------------------------------------------------------------------
+
+==============================================================================
+1. Requirements                                     *aviary.nvim-requirements*
+
+*pigeon.nvim-requirements*
+
+- Neovim 0.11+; Git for hawk.
+- A working Neovim clipboard provider for clipboard exports.
+- Optional: tmux 3.0+ for pane exports; fzf-lua <https://github.com/ibhagwan/fzf-lua>
+    or snacks.nvim <https://github.com/folke/snacks.nvim> for multi-select and previews.
+
+
+==============================================================================
+2. Installation                                     *aviary.nvim-installation*
+
+*pigeon.nvim-installation*
+
+Install with lazy.nvim:
+
+>lua
+    {
+      "ZachVec/aviary.nvim",
+      main = "aviary",
+      opts = {
+        picker = { implementation = "native" }, -- native | fzf-lua | snacks
+        exporter = { default = "clipboard" },   -- clipboard | tmux
+      },
+      keys = {
+        { "<leader>ar", function() require("aviary").hawk.review() end, desc = "Review changes" },
+        { "<leader>ac", function() require("aviary").hawk.comment() end, mode = { "n", "x" }, desc = "Add comment" },
+        { "<leader>af", function() require("aviary").pigeon.files() end, desc = "Export file references" },
+      },
+    }
+<
+
+See the feature manuals above, or |hawk.nvim| and |pigeon.nvim|, for usage and
+configuration. Shared export and picker settings
+|pigeon.nvim-exporting-and-selection| apply to both features.
+
+
+==============================================================================
+3. Default Options                               *aviary.nvim-default-options*
+
+Default Options ~
+
+>lua
+    require("aviary").setup({
+      hawk = {
+        highlights = {
+          meta = "qfLineNr",
+        },
+        review = {
+          keymaps = { close = { "q" }, jump = { "<CR>" }, refresh = { "r" }, switch_base = { "<Tab>" } },
+          actions = {
+            close = function(list)
+              list:close()
+            end,
+            refresh = function(list)
+              list:refresh()
+            end,
+            jump = function(list, item)
+              list:jump(item)
+            end,
+            switch_base = function(list)
+              list:switch_base()
+            end,
+          },
+        },
+        comments = {
+          keymaps = {
+            close = { "q" },
+            jump = { "<CR>" },
+            edit = { "e" },
+            remove = { "x" },
+            send = { "s" },
+            send_all = { "S" },
+            clear = { "X" },
+            refresh = { "r" },
+          },
+          actions = {
+            close = function(list)
+              list:close()
+            end,
+            refresh = function(list)
+              list:refresh()
+            end,
+            jump = function(list, item)
+              list:jump(item)
+            end,
+            edit = function(list, item)
+              list:edit(item)
+            end,
+            remove = function(list, item)
+              list:remove(item)
+            end,
+            send = function(list, item)
+              list:send(item)
+            end,
+            send_all = function(list)
+              list:send_all()
+            end,
+            clear = function(list)
+              list:clear()
+            end,
+          },
+        },
+      },
+      pigeon = {
+        --- Named prompt templates offered by the prompt flow. The built-ins are the
+        --- raw references; user entries merge additively, so a name you set
+        --- overrides the built-in while names you leave unset are kept.
+        prompts = {
+          ["{file}"] = "{file}",
+          ["{line}"] = "{line}",
+        },
+        --- The files/buffers flow's options.
+        references = {
+          --- Separator between references: "\n" puts one per line, " " one line.
+          join = "\n",
+        },
+      },
+      picker = {
+        --- Which selection UI to render every pick through.
+        implementation = "native",
+      },
+      exporter = {
+        default = "clipboard",
+        format = function(file, loc)
+          return file .. (loc and " " .. loc or "")
+        end,
+      },
+    })
+<
+
+
+==============================================================================
+4. License                                               *aviary.nvim-license*
+
+MIT
+
+Generated by panvimdoc <https://github.com/kdheepak/panvimdoc>
+
+vim:tw=78:ts=8:noet:ft=help:norl:

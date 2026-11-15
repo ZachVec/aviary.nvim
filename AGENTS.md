@@ -1,80 +1,139 @@
 # AGENTS.md
 
-aviary is one Neovim plugin that hosts a set of subsystems. Today:
+aviary is a Neovim plugin with public features and internal shared modules.
 
-- **hawk** — walk a git change set as a flat, tickable list of files and hunks.
-- **pigeon** — send text from Neovim into the other panes of the multiplexer
-  window this Neovim sits in.
+## Layout and boundaries
 
-The set is not closed. A subsystem is a directory under `lua/aviary/`, and the
-root module knows no names: `require("aviary").<name>` is a lazy `require` of
-`aviary.<name>`, so a third one adds a directory, not a case in the root.
-
-Each subsystem keeps its own design record, glossary, and gotchas, and its own
-`AGENTS.md` beside its code. This file is the repository-wide contract: the
-layout, the conventions that hold everywhere, and the migration that is
-bringing the two in. The migration plan and its gates live in
-[docs/migration.md](docs/migration.md).
-
-## Repository layout
-
-```
-lua/aviary/
-  init.lua          composition root: lazy subsystem access + the shared config table
-  <name>/           one subsystem: its own AGENTS.md, config, docs, and tests
-  hawk/             hawk: source, model, view
-  pigeon/           pigeon: transport, picker, formats
-doc/                vim help: :h hawk.nvim, :h pigeon.nvim
-docs/               hawk.md, pigeon.md (user-facing), <name>/{design,glossary,gotchas}.md,
-                    migration.md
-tests/              one harness (minit.lua); tests/hawk/**, tests/pigeon/**
-Makefile            check entrypoint
+```text
+lua/aviary/init.lua           composition root and lazy feature access
+lua/aviary/<feature>/         public feature, entered through init.lua
+lua/aviary/shared/<name>.lua  internal shared module; multi-file modules use <name>/init.lua with private implementation files
+docs/<feature>.md             user manual
+docs/<feature>/               selected developer documents
+docs/shared/<name>/           selected shared-module developer documents
+doc/                          generated user help
+tests/<feature>/              feature specs
+tests/shared/<name>/          shared-module specs
+Makefile                      verification targets
 ```
 
-hawk and pigeon — the first two subsystems — arrive in the commits after the
-repository skeleton; while a subsystem is absent, its line above is the target,
-not a description.
+- Features must not depend on other features; compose them at the root. Shared modules must not depend on features or form dependency cycles.
 
 ## Commands
 
+Run from the repository root. Targets are defined in [Makefile](./Makefile).
+
 ```sh
-make check     # style + lint + test
-make style     # stylua --check
-make lint      # lua-language-server (every .lua file, tests/ included)
-make test      # the mini.test suite (tests/**/*_spec.lua)
+make style          # Lua formatting
+make lint           # Lua diagnostics
+make links          # Markdown links
+make docs-check     # Generate Vimdoc and test the pipeline; requires pinned Pandoc
+make test-hawk      # Hawk specs
+make test-weaver    # Weaver specs, including picker
+make test-picker    # Weaver picker specs
+make test-pigeon    # Pigeon specs, including tmux integration
+make test-message   # shared.message specs
+make test           # All specs
+make check          # style + lint + test + links
 ```
+
+For individual specs, replace the example path; multiple paths are accepted:
+
+```sh
+NVIM_LOG_FILE=/tmp/aviary-nvim.log nvim --headless -u NONE -l tests/minit.lua --minitest --offline tests/shared/path_spec.lua
+```
+
+- Match checks to changes: Lua edits need style, diagnostics, and relevant specs; Markdown edits need link checks; Vimdoc generation changes need `make docs-check`. Include affected callers and composition specs for cross-module behavior changes.
+- Use full `make test` or `make check` only when explicitly requested, diagnosing CI failures, or narrower checks cannot adequately cover the change. Do not repeat passing checks without relevant changes or unresolved concerns.
+- Inside Neovim, use `make NVIM=nvim <target>` to override the inherited socket-valued `NVIM`. Tmux integration tests require Unix-socket access and Python 3.
 
 ## Conventions
 
-- **The public surface is `require("aviary").<subsystem>`.** A subsystem's
-  internals import each other by full path (`require("aviary.hawk.git")`),
-  never through the root: during a module's own load, going back through
-  `require("aviary")` would re-enter it.
-- **A new subsystem is a directory.** Adding one means `lua/aviary/<name>/`
-  with its own `AGENTS.md`, config, public docs, and tests; the root module is
-  not edited for it.
-- **No user commands in the end state.** A subsystem exposes Lua functions.
-  During the migration `:Hawk` and `:Pigeon` still exist; they are removed when
-  the API is unified.
-- **aviary never sets `_G`.** A user who wants a short name writes
-  `_G.Aviary = require("aviary")` themselves.
-- **Terminology lives in each subsystem's glossary.** Use its words in code,
-  comments, docs, and commit messages; when a term changes, change the glossary
-  in the same change.
-- **Config is data.** A subsystem's `config.lua` carries the option table and
-  its shape checks; what a value *selects* is resolved by the module that owns
-  it.
-- **Keep each subsystem's dependency direction.** hawk: view → model → source.
-  pigeon: composition → commands → deliver → transport, and reference →
-  formats.
-- Lua 5.1 / LuaJIT only — Neovim's runtime; no features newer than 5.1.
-- Every module is `local M = {}` … `return M`; imports use full module paths,
-  sorted by module path.
-- Public functions carry LuaLS annotations; a seam's contract types live with
-  the seam, and options live in the subsystem's `config.lua`.
-- Keep the public docs current in the same change: README, `docs/<name>.md`,
-  and `doc/<name>.nvim.txt`.
-- **User-facing docs say what, not why.** Rationale belongs in code comments or
-  the subsystem's `docs/<name>/design.md`.
-- Tests are `mini.test`, bootstrapped through `lazy.minit` into an isolated
-  `.tests/`; `rm -rf .tests` asks for a fresh install.
+- **Zero Overheads.** Don't pay for what you don't use; what you do use, you couldn't hand-code any better.
+- **Write annotations.** Declare table types and members once at file top; use inline function types for function members and documentation tags directly above standalone functions.
+- **Enforce invariants by design.** Establish contracts through types, visibility, and API design.
+- **Trust Contracts.** Treat annotations and API contracts as enforced. Callers satisfy them; callees do not recheck them. Let violations fail naturally.
+- **Let exceptions propagate.** Catch only to perform necessary failure handling, not merely to convert exceptions into return values.
+- **Validate untrusted boundaries.** Repository code, Neovim APIs (including overrides), and dependencies explicitly required by this repository are trusted. Validate untrusted external data and values received from other external code at entry.
+- **Optional parameters take `?` on the name, not the type:** write `---@param name? string`, never `---@param name string?`.
+- **Acquire resources transactionally.** Use the shared [transaction module](./lua/aviary/shared/transaction.lua) for fallible multi-step acquisition.
+- **Keep configuration as data.** Put configuration and shape validation in `config.lua`. Non-root `setup` only merges options over defaults, validates, and updates its own running configuration. Resolve selected behavior when used.
+- **Keep comments local.** Do not restate code, expand unrelated comments, or explain distant behavior without local need rationale.
+- **Tests specify intended behavior.** When intended behavior changes, update the tests and explain why in the PR.
+- **Keep work notes local.** Store specs, tickets, task progress, troubleshooting history, and review responses as Markdown in `.scratch/<feature-slug>/`.
+
+## Documentation
+
+- Start with module entries and types, then read relevant docs before designing.
+- Choose the location by the reader's question, not content length or file count.
+- Store complete definitions, contracts, and rationale once; elsewhere, use necessary summaries and inline Markdown links with explicit relative targets.
+- Update affected contracts and docs with code; remove obsolete content and keep terminology consistent.
+- Add information that names, types, and code leave unstated. Do not require prose for every function or developer docs for every module.
+
+### Source comments
+
+- Document caller contracts at module entries and in type/member/function annotations: inputs, outputs, preconditions, side effects, errors, and ordering.
+- Include ownership, borrowing, mutability, and cancellation requirements.
+- Callers must be able to use the interface correctly without reading implementation or architecture.
+- State common obligations once on their owning type or module.
+- Add minimal examples when they clarify the interface.
+- Put module-wide implementation invariants at the source entry; local mechanisms, reasons, and external limitations beside the code they constrain.
+- Put design rationale meeting the Decisions criteria in decisions.
+
+#### Interface contracts
+
+Evaluate each statement for the current module and its direct caller. Include it in the interface contract only when all three apply:
+
+- The caller needs it to prepare inputs, arrange calls, handle results, or judge suitability; understanding implementation alone is insufficient.
+- Preconditions are the caller's responsibility; guarantees are the module's responsibility. Dependency assumptions and callers' recovery policies do not automatically belong here.
+- It uses this interface's concepts and remains valid when the implementation changes without changing the interface's promises.
+
+For statements that do not qualify:
+
+- Keep internal mechanisms and assumptions with their implementation; explain cross-module collaboration in architecture.
+- Do not hide real limitations by moving or deleting comments. Review any new caller obligation as an interface design change.
+- Backend names and environment requirements may appear where configuration exposes them. Judge responsibility, not technical vocabulary.
+
+### User documentation
+
+- `README.md` is the quick start; `docs/<feature>.md` is the manual. New features need both.
+- Cover installation, dependencies, configuration, defaults, examples, and user-visible behavior and limitations.
+- Users must not need source or developer docs. Repeat user-visible contracts as needed.
+- Put implementation explanations in source or developer docs.
+- Edit Markdown; CI generates Vimdoc from README and user manuals. Developer documents are excluded.
+
+### Architecture
+
+- Explain how parts work together: responsibilities, dependencies, data/control flow, and state/resource ownership and lifetimes.
+- Organize around relationships and runtime flows, including those within one file. Avoid exhaustive file-by-file or method-by-method tours.
+- Add architecture docs when relationships need more than a source-entry overview; update inaccurate diagrams and explanations.
+- Summarize contracts only as needed to explain a relationship; link to the owning source without copying the full contract.
+- Keep calling instructions, parameter/return/option tables, and standalone usage recipes in source comments or user manuals.
+- Keep local implementation explanations beside code, concept definitions in glossary, and design trade-offs in decisions.
+
+### Glossary
+
+- Describe project-specific concepts in one or two sentences.
+- Give each concept one canonical name; list rejected synonyms under `_Avoid_`.
+- Add terms as soon as their meaning and name are settled.
+- Immediately point out wording or behavior claims that conflict with existing glossary definitions or code.
+- Resolve vague, overloaded, or conflicting terms through concrete examples; check the result against code.
+- Exclude general programming concepts, specifications, implementation details, design decisions, and session notes.
+
+### Decisions
+
+Capture a design choice, its context, and its rationale in one to three sentences. Propose a new record only when all three apply:
+
+- Reversing the choice would have meaningful cost.
+- The choice would be surprising without context.
+- There were genuine alternatives and trade-offs.
+
+### Placement review
+
+Review added or revised prose before finishing a change:
+
+- Apply the interface-contract criteria before moving conditions to module entries.
+- Ensure every required calling condition is in the source entry or its types; architecture must not be its only location.
+- Check that each architecture paragraph explains a relationship or runtime flow. Move pure calling/configuration guidance to source comments or user documentation.
+- Separate passages answering different questions and move each explanation to its owning location.
+- Replace redundant full explanations with summaries and links; keep repeated user-visible facts consistent.

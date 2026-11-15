@@ -1,0 +1,176 @@
+*hawk.nvim.txt*                                            hawk · aviary.nvim
+
+==============================================================================
+Table of Contents                                *hawk.nvim-table-of-contents*
+
+1. Review                                                   |hawk.nvim-review|
+2. Comments                                               |hawk.nvim-comments|
+3. List buffers and windows               |hawk.nvim-list-buffers-and-windows|
+4. Configuration                                     |hawk.nvim-configuration|
+*hawk.nvim*
+
+hawk
+
+*hawk.nvim-api* *hawk.review()* *hawk.comment()* *hawk.comments()*
+
+Review repository changes and manage session comments in List buffers. Requires
+Neovim 0.11+ and Git. See installation |aviary.nvim-installation| in the
+README.
+
+>lua
+    local hawk = require("aviary").hawk
+    hawk.review()                  -- working tree on disk compared with the index
+    hawk.review({ base = "HEAD" })  -- start a new review against HEAD
+    hawk.comment()                 -- add a note to the selection or current line
+    hawk.comments()                -- open all session comments
+<
+
+Map calls to keys yourself. For visual selections, use a Lua callback or a
+`<Cmd>` mapping so `comment()` can capture the active selection:
+
+>lua
+    vim.keymap.set({ "n", "x" }, "<leader>ac", function()
+      require("aviary").hawk.comment()
+    end, { desc = "Add comment" })
+<
+
+
+==============================================================================
+1. Review                                                   *hawk.nvim-review*
+
+`review({ base? })` lists changes throughout the Git repository containing
+Neovim’s effective cwd, including window-local cwd. The base is `"index"`
+(default) or `"HEAD"`; the other side is the working tree on disk. Unsaved
+edits are excluded. Index comparison works before the first commit.
+
+Each hunk has a row with path, added/removed counts, line and summary. Binary,
+mode-only, pure rename, empty-file and unmerged changes have file rows.
+Untracked files are included; ignored files are excluded. Counts are zero for
+file rows without text changes and unavailable for binary/unmerged changes.
+Empty results still open a List.
+
+  Key     Action
+  ------- -------------------------------------------
+  Enter   Jump to the selected change
+  Tab     Switch between HEAD and index
+  r       Refresh from the current cwd’s repository
+  q       Close this view
+The base argument initializes a new review List. Reopening an existing List
+preserves its base; use Tab to switch. The buffer name brackets the selected
+base: `Review: [HEAD] index` or `Review: HEAD [index]`. A deleted hunk jumps to
+the preceding surviving line, or line 1. Jumping to a missing file warns and
+opens nothing.
+
+
+==============================================================================
+2. Comments                                               *hawk.nvim-comments*
+
+`comment()` prompts for a note on the current line or visual line range. The
+source must be a normal buffer backed by a readable file. An explicit range
+uses a buffer handle and 1-based inclusive rows:
+
+>lua
+    require("aviary").hawk.comment({ bufnr = 0, start_row = 12, end_row = 15 })
+<
+
+`comments()` opens all session comments. Notes follow edits, including unsaved
+changes. Fully deleted ranges disappear until undo restores them. Renaming or
+ordinary `:bunload` retains comments; `:bdelete` and `:bwipeout` clear them.
+Comments are session data and are not saved to disk. Existing comments remain
+listable after a file is removed or a buffer renamed before writing.
+
+  Key     Action
+  ------- -----------------------------------------------------
+  Enter   Jump to the selected comment
+  e       Edit its note
+  x       Remove it
+  s       Export it
+  S       Export all visible session comments
+  X       Clear all session comments, including hidden ranges
+  r       Refresh ranges and notes
+  q       Close this view
+Exports retain comments. Each comment becomes a reference, a space, and its
+note; a batch uses newlines with no trailing newline. For example: `src/a.lua
+:L12-15 needs a guard`. The filename, range and note are captured before target
+selection, so later source changes do not alter a pending export. See exporting
+and selection |pigeon.nvim-exporting-and-selection| for outlet, target and
+reference settings shared with pigeon.
+
+
+==============================================================================
+3. List buffers and windows               *hawk.nvim-list-buffers-and-windows*
+
+*hawk.nvim-lists*
+
+Review and comments each have one List buffer shared across windows and tabs.
+Opening focuses an existing view in the current tab or creates a ten-line
+bottom split. Refreshing updates every view while preserving each cursor and
+scroll position. Views preserve `number` and `relativenumber`.
+
+Closing a view retains the List and its state. Wiping the List buffer ends that
+List’s lifetime; wiping the comments List leaves source comments intact.
+Jumping uses the current tab’s text window with the smallest ID, creating a
+split if necessary. Native quickfix and location lists remain independent.
+
+`review(opts?)` and `comments()` return their List instance, or `nil, reason`
+on an opening failure. `comment(opts?)` has no return value; omit opts for the
+current selection/line, or provide `bufnr`, `start_row`, and `end_row`
+together.
+
+
+==============================================================================
+4. Configuration                                     *hawk.nvim-configuration*
+
+>lua
+    require("aviary").setup({
+      hawk = {
+        highlights = { meta = "qfLineNr" },
+        review = {
+          keymaps = {
+            close = { "q" }, jump = { "<CR>" },
+            refresh = { "r" }, switch_base = { "<Tab>" },
+          },
+        },
+        comments = {
+          keymaps = {
+            close = { "q" }, jump = { "<CR>" }, edit = { "e" },
+            remove = { "x" }, send = { "s" }, send_all = { "S" },
+            clear = { "X" }, refresh = { "r" },
+          },
+        },
+      },
+    })
+<
+
+An action’s key list replaces its default keys; `{}` disables them. Unnamed
+actions retain their defaults. Both sections accept `actions`, mapping action
+names to `function(list, item)`. `item` is the selected entry, or nil for an
+empty List. Every keymapped action needs a handler. For example:
+
+>lua
+    require("aviary").setup({
+      hawk = {
+        review = {
+          keymaps = { inspect = { "i" } },
+          actions = { inspect = function(_, item) vim.print(item) end },
+        },
+      },
+    })
+<
+
+Default handlers have the names shown in the key tables and can be overridden.
+List instances provide `close()`, `jump(item)`, and `refresh()`. Review also
+provides `switch_base()`; comments provides `edit(item)`, `remove(item)`,
+`send(item)`, `send_all()`, and `clear()`. The `buffer`, `kind`, and review
+`base` fields describe the List and should be treated as read-only.
+
+`highlights.meta` controls line/range labels. Other columns use `Normal`,
+`Directory`, `Added`, and `Removed`; hawk defines no highlight groups.
+
+*hawk.nvim-health*
+
+Run `:checkhealth aviary.hawk` to check Git availability and version.
+
+Generated by panvimdoc <https://github.com/kdheepak/panvimdoc>
+
+vim:tw=78:ts=8:noet:ft=help:norl:

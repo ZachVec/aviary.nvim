@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd -- "$(dirname -- "$0")/../.."
+root="$PWD"
+writer_dir="$(cd -- "${PANVIMDOC_DIR:-.tools/panvimdoc}" && pwd)"
+fixture_dir="$(mktemp -d)"
+trap 'rm -rf -- "$fixture_dir"' EXIT
+fixture="$fixture_dir/repository"
+mkdir -p "$fixture/scripts" "$fixture/docs/developer" "$fixture/doc"
+cp scripts/docs scripts/docs-tools.env scripts/vimdoc.lua "$fixture/scripts/"
+
+generate() {
+  PANVIMDOC_DIR="$writer_dir" bash "$fixture/scripts/docs"
+}
+
+assert_has() {
+  if [[ "$(cat -- "$1")" != *"$2"* ]]; then
+    echo "Missing '$2' in $1" >&2
+    exit 1
+  fi
+}
+
+cat >"$fixture/README.md" <<'EOF'
+# Fixture
+
+| Feature | Purpose |
+| --- | --- |
+| [sample](./docs/./sample.md#Mixed) | [Website](https://example.org/install) |
+
+[nested](./docs/unused/../sample.md#Nested)
+
+## Installation {#SetupID}
+
+Install this fixture.
+EOF
+cat >"$fixture/docs/sample.md" <<'EOF'
+# Sample
+
+[install](../README.md#SetupID)
+
+## Public Title {#Mixed}
+
+[self](#Mixed) and [encoded](#%4Dixed).
+
+### Nested Title {#Nested}
+
+Nested content.
+
+## More
+
+### Nested Title {#OtherNested}
+
+[other](#OtherNested)
+
+[architecture](./developer/architecture.md#model)
+EOF
+printf '# Developer\n\n## Model\n' >"$fixture/docs/developer/architecture.md"
+printf 'unrelated help\n' >"$fixture/doc/notes.txt"
+printf 'orphan help\n' >"$fixture/doc/obsolete.nvim.txt"
+generate
+[[ ! -e "$fixture/doc/obsolete.nvim.txt" ]]
+[[ ! -e "$fixture/doc/architecture.nvim.txt" ]]
+assert_has "$fixture/doc/notes.txt" 'unrelated help'
+assert_has "$fixture/doc/aviary.nvim.txt" '|sample.nvim-public-title|'
+assert_has "$fixture/doc/aviary.nvim.txt" 'https://example.org/install'
+assert_has "$fixture/doc/aviary.nvim.txt" '|sample.nvim-public-title-nested-title|'
+assert_has "$fixture/doc/sample.nvim.txt" '|aviary.nvim-installation|'
+assert_has "$fixture/doc/sample.nvim.txt" '*sample.nvim-public-title*'
+assert_has "$fixture/doc/sample.nvim.txt" '|sample.nvim-public-title|'
+assert_has "$fixture/doc/sample.nvim.txt" '*sample.nvim-public-title-nested-title*'
+assert_has "$fixture/doc/sample.nvim.txt" '*sample.nvim-more-nested-title*'
+assert_has "$fixture/doc/sample.nvim.txt" '|sample.nvim-more-nested-title|'
+assert_has "$fixture/doc/sample.nvim.txt" '<./developer/architecture.md#model>'
+
+# A failed generation must leave every previous help file untouched.
+cp "$fixture/docs/sample.md" "$fixture_dir/sample.md"
+printf 'retain on failure\n' >"$fixture/doc/obsolete.nvim.txt"
+cp -R "$fixture/doc" "$fixture_dir/before"
+printf '\n[broken](#Missing)\n' >>"$fixture/docs/sample.md"
+if generate >"$fixture_dir/error" 2>&1; then
+  echo 'An unknown heading unexpectedly generated help.' >&2
+  exit 1
+fi
+assert_has "$fixture_dir/error" 'docs/sample.md: no tagged heading for #Missing'
+diff -r "$fixture_dir/before" "$fixture/doc"
+cp "$fixture_dir/sample.md" "$fixture/docs/sample.md"
+printf '\n#### Untagged {#Deep}\n\n[too deep](#Deep)\n' >>"$fixture/docs/sample.md"
+if generate >"$fixture_dir/error" 2>&1; then
+  echo 'An untagged deep heading unexpectedly generated a help link.' >&2
+  exit 1
+fi
+assert_has "$fixture_dir/error" 'no tagged heading for #Deep'
+diff -r "$fixture_dir/before" "$fixture/doc"
+cp "$fixture_dir/sample.md" "$fixture/docs/sample.md"
+generate
+cp -R "$fixture/doc" "$fixture_dir/repeated"
+generate
+diff -r "$fixture_dir/repeated" "$fixture/doc"
+
+# Remove a manual, generate its artifact set, and publish into a fresh checkout.
+git init --quiet --initial-branch=main "$fixture"
+git -C "$fixture" add .
+git -C "$fixture" -c user.name=Docs-test -c user.email=docs@example.invalid \
+  -c commit.gpgsign=false commit --quiet -m 'initial manuals'
+git init --quiet --bare --initial-branch=main "$fixture_dir/origin.git"
+git -C "$fixture" remote add origin "$fixture_dir/origin.git"
+git -C "$fixture" push --quiet origin main
+rm -- "$fixture/docs/sample.md"
+printf '# Fixture\n\n## Installation\n\nInstall the fixture.\n' >"$fixture/README.md"
+git -C "$fixture" add README.md docs/sample.md
+git -C "$fixture" -c user.name=Docs-test -c user.email=docs@example.invalid \
+  -c commit.gpgsign=false commit --quiet -m 'remove the sample manual'
+git -C "$fixture" push --quiet origin main
+tested_head="$(git -C "$fixture" rev-parse HEAD)"
+generate
+[[ ! -e "$fixture/doc/sample.nvim.txt" ]]
+mkdir "$fixture_dir/artifact"
+cp "$fixture/doc/aviary.nvim.txt" "$fixture_dir/artifact/"
+git clone --quiet "$fixture_dir/origin.git" "$fixture_dir/publish"
+git -C "$fixture_dir/publish" config commit.gpgsign false
+(
+  cd -- "$fixture_dir/publish"
+  bash "$root/scripts/publish-docs" "$fixture_dir/artifact" main "$tested_head"
+) >"$fixture_dir/publication" 2>&1
+[[ -z "$(git -C "$fixture_dir/origin.git" ls-tree --name-only main doc/sample.nvim.txt)" ]]
+[[ "$(git -C "$fixture_dir/origin.git" show main:doc/notes.txt)" == 'unrelated help' ]]
+[[ "$(git -C "$fixture_dir/origin.git" log -1 --format=%s main)" == 'docs: regenerate Vimdoc [skip ci]' ]]
+echo 'Vimdoc generation, table URLs, heading resolution, failure preservation, and deletion publication pass.'

@@ -1,0 +1,190 @@
+# Hawk
+
+<!-- vimdoc: hawk.show() aviary.hawk.show() -->
+
+Hawk reviews Git versions in a dedicated tab.
+Staging, committing, pushing and creating PRs remain with your existing Git tools.
+See [installation](../README.md#installation) and
+[requirements](../README.md#requirements).
+
+```lua
+local aviary = require("aviary")
+aviary.hawk.show() -- open/focus Review: changed files below, two Git versions above
+```
+
+Hawk manages one reusable Review tab. Creation errors propagate after resource
+rollback; asynchronous Review failures report once and retain the UI. Cancelled
+reads report nothing. Content capture belongs to [Weaver](./weaver.md).
+
+## Review
+
+The repository comes from Neovim's **global cwd**, ignoring `:lcd`, `:tcd`, the
+current file and LSP roots. Outside Git, Review opens and refreshes an empty list
+without an error; choosing a ref or commit requires a repository. Entering a
+repository starts observation and refreshes the list. Review compares a commit
+with the index or another commit. It never reads working-tree files as review content. Stage the changes
+you want to inspect; unsaved, unstaged and untracked contents are excluded.
+The initial comparison uses **HEAD → index**, with direct comparison. Git resolves
+HEAD on every refresh, so the default follows commits, resets and branch switches.
+Committing all staged changes leaves an empty list on refresh. Detached HEAD is
+supported. Explicit ref and commit choices persist; refs follow their names and
+commit SHAs stay fixed. HEAD must exist; an unborn repository reports an error
+until it has a commit.
+
+The list-buffer title uses `Review: {mode} {base}   {target}`. The comparison
+mode is shown as  for direct or 󰓁 for merge-base. Commit hashes display their
+first seven characters; ref names and `index` remain unchanged. Comparisons
+continue to use full revisions. The mode icons are Nerd Fonts'
+`nf-cod-git_compare` and `nf-md-source_fork`; the arrow is `nf-cod-arrow_both`.
+
+```text
+Review:  HEAD   index
+Review: 󰓁 refs/heads/main   index
+```
+
+Outside Git, the title is simply `Review`.
+
+The bottom list buffer contains every changed file in repository-relative
+path order. Each row shows `{type} {path} {changes}`, left-aligned with one space
+between fields. Added/deleted counts follow the path immediately, for example
+`M lua/aviary/hawk/review/review.lua +12 -3`. Status letters use addition, deletion
+or change colors; unresolved conflicts use a warning color. Added and deleted
+counts retain their respective colors. Enter loads the represented Git versions
+into the left/base and right/target windows,
+enables Neovim's native diff and focuses the right side, including deleted files.
+The two readonly buffers are reused when selecting another file. Their names
+use `{ref}://{path}`, such as `f8b5f28://lua/main.lua` and
+`index://lua/main.lua`. Hashes display seven characters; other refs remain
+unchanged. Names use the revisions captured with the selected row; merge-base
+comparisons name the left side with the effective ancestor's hash. Renames use
+the old path on the left and the new path on the right.
+Binary, submodule and unresolved changes show explicit descriptions instead of text.
+The two text versions load concurrently; selecting another item or closing Review
+cancels both pending reads.
+Renames, mode changes, empty files and deletions remain visible.
+Counts have no padding; `10k+` means at least 10000 lines. Paths fit the width
+remaining after the status, counts and separators by replacing whole directories
+with `…`. Filenames stay complete when possible and shorten in the middle only
+when necessary. Rename pairs (`old → new`) shorten in the middle as one text label.
+Items retain the original paths and exact counts.
+
+| Key | Action |
+| --- | --- |
+| `Enter` | Display the selected file's two versions |
+| `b` / `B` | Choose base ref / fixed commit |
+| `f` / `F` | Choose target ref (including index) / fixed commit |
+| `t` | Toggle direct / merge-base comparison |
+| `r` | Refresh changed-file metadata |
+| `q` | Close Review |
+
+Each version key opens one `vim.ui.select` after Git asynchronously prepares its
+candidates. Ref choices include local branches, remote-tracking branches and tags,
+using full ref names. HEAD and symbolic aliases such as origin/HEAD are omitted.
+Remote-tracking branches use locally fetched objects; selection and comparison
+do not run fetch or checkout, and no matching local branch is required. Refs
+follow their names on subsequent reads; commit choices retain the full SHA.
+Canceling selection changes nothing. There is no external picker dependency.
+
+Direct comparison uses the two selected versions. Merge-base comparison uses
+their common ancestor as the effective base: `master → HEAD` with this mode
+shows changes from the branch's fork point, like a PR. Fixed commit choices obey
+the same rule. For target=index, the ancestor is computed from base and HEAD,
+then compared with the index. Unrelated histories report an error.
+
+Git directory events refresh the changed-file metadata, including while another
+tab is active. Hawk watches the actual gitdir/commondir non-recursively, including
+linked worktrees. External changes only to nested refs may not refresh immediately;
+press `r` to refresh when needed. Switching tabs or regaining focus does not refresh
+the comparison. Global cwd changes rebind the watcher; leaving Git clears the list
+and pauses observation. Working-file saves do not trigger review refresh.
+Watcher discovery and setup failures notify after cleanup. Filesystem callback
+errors close the current watch and raise on the main loop; `r` still works.
+Refresh resolves the repository again, including after initializing Git in the same cwd.
+
+Refresh does not replace the two displayed versions; Enter explicitly selects
+what to inspect. Each row captures its blob IDs, so Enter reads exactly the
+versions represented by that row even if index/refs have since moved. Failed
+refreshes retain the last successful metadata. Empty success leaves the feature
+buffer open. Comparison keys remain available even if the first read fails.
+
+## Buffers and windows
+
+<!-- vimdoc: hawk.nvim-buffers -->
+
+Review owns two readonly version windows above a full-width bottom list requesting
+ten lines without a height lock. Complete UI creation is transactional; failure
+cleans the attempt and restores the source window.
+
+The unlisted nofile list has no swap, modelines or undo. Its window and version
+windows use `winfixbuf`; versions use native diff. Forced replacement and owned
+buffer wipe end the instance. List wrapping follows the user's window setting.
+Width changes redraw retained items without reloading or cancelling data reads.
+
+Closing an owned window or wiping an owned buffer ends Review and stops its
+observation and pending list/version reads. Last-tab closure uses native `qall`
+with unsaved checks and confirmation.
+An ended instance remains stopped if exit is refused or cancelled. Reopening creates
+a new instance. Session comparison choices survive closure.
+
+## Configuration
+
+```lua
+require("aviary").setup({
+  hawk = {
+    keymaps = {
+      close = { "q" }, refresh = { "r" }, jump = { "<CR>" },
+      base_ref = { "b" }, base_commit = { "B" },
+      target_ref = { "f" }, target_commit = { "F" }, toggle = { "t" },
+    },
+    actions = {},
+  },
+})
+```
+
+Each key array replaces defaults; `{}` disables that action's keys. Actions override
+built-ins or supply handlers for custom mapped actions. All mappings belong to
+Review and are installed when its list is created. Setup merges and validates
+configuration data only.
+
+Actions borrow their concrete Tab for the call. Capture the current item before
+async work rather than retaining the Tab.
+
+| Method | Behavior |
+| --- | --- |
+| `tab:focus()` | Focus the bottom list window |
+| `tab:current()` | Return the original selected Change, or nil when no item is selected |
+| `tab:refresh()` | Request a metadata refresh |
+| `tab:jump(item)` | Display the captured versions of an item returned by `current()` |
+| `tab:pick(side, kind)` | Choose a revision; side is `base` or `target`, kind is `ref` or `commit` |
+| `tab:toggle()` | Toggle direct / merge-base comparison |
+
+For example, add a mapped action that opens the base-ref picker:
+
+```lua
+require("aviary").setup({
+  hawk = {
+    keymaps = { choose_base = { "<leader>b" } },
+    actions = {
+      choose_base = function(tab)
+        tab:pick("base", "ref")
+      end,
+    },
+  },
+})
+```
+
+Full contracts live at the [Hawk entry](../lua/aviary/hawk/init.lua) and
+[Review entry](../lua/aviary/hawk/review/init.lua).
+
+The former `common` and `review` configuration sections are replaced by
+`hawk.keymaps` and `hawk.actions`. Feature names and `select_feature` are removed;
+use `aviary.hawk.show()` without arguments, replacing the root `review()` action.
+Tab has no default mapping.
+
+There is no custom highlight configuration. The former comments feature and
+`hawk.comments` options have been removed; use
+[Weaver's `{line}` prompt](./weaver.md#templates).
+
+<!-- vimdoc: hawk.nvim-health -->
+
+`:checkhealth aviary.hawk` reports Git availability for Review.

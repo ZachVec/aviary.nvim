@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+artifact_dir="${1:?expected artifact directory}"
+branch="${2:?expected destination branch}"
+tested_head="${3:?expected validated commit}"
+cd -- "$(git rev-parse --show-toplevel)"
+git check-ref-format "refs/heads/$branch"
+if [[ "$(git rev-parse HEAD)" != "$tested_head" ]] || [[ -n "$(git status --porcelain)" ]]; then
+  echo "Publishing requires a clean checkout of the validated commit." >&2
+  exit 1
+fi
+
+remote_head() {
+  local ref
+  ref="$(git ls-remote --exit-code origin "refs/heads/$branch")" || return
+  printf '%s\n' "${ref%%[[:space:]]*}"
+}
+
+current_head="$(remote_head)"
+if [[ "$current_head" != "$tested_head" ]]; then
+  echo "Skipping Vimdoc publication: the default branch has advanced."
+  exit 0
+fi
+
+# Artifacts are data. Only copy regular help files into doc/; never execute them.
+shopt -s nullglob dotglob
+outputs=("$artifact_dir"/*)
+if ((${#outputs[@]} == 0)); then
+  echo "No generated help files to publish." >&2
+  exit 1
+fi
+destinations=()
+mkdir -p doc
+for output in "${outputs[@]}"; do
+  name="${output##*/}"
+  if [[ ! "$name" =~ ^[a-zA-Z0-9_-]+\.nvim\.txt$ ]] || [[ ! -f "$output" || -L "$output" ]]; then
+    echo "Unexpected Vimdoc artifact: $name" >&2
+    exit 1
+  fi
+  destinations+=("doc/$name")
+done
+
+for output in "${outputs[@]}"; do
+  cp -- "$output" "doc/${output##*/}"
+done
+for previous in doc/*.nvim.txt; do
+  if [[ ! -f "$artifact_dir/${previous##*/}" ]]; then
+    rm -- "$previous"
+    destinations+=("$previous")
+  fi
+done
+
+git add -A -- "${destinations[@]}"
+if git diff --cached --quiet; then
+  echo "Generated help is unchanged."
+  exit 0
+fi
+git -c user.name='github-actions[bot]' \
+  -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+  commit -m 'docs: regenerate Vimdoc [skip ci]'
+if git push origin "HEAD:refs/heads/$branch"; then
+  exit 0
+fi
+current_head="$(remote_head)"
+if [[ "$current_head" != "$tested_head" ]]; then
+  echo "Skipping Vimdoc publication: the default branch advanced during the push."
+  exit 0
+fi
+echo "Vimdoc publication failed while the default branch was unchanged." >&2
+exit 1

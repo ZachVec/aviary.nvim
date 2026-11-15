@@ -1,12 +1,11 @@
 #!/usr/bin/env -S nvim -l
 
--- Test bootstrap modeled on vantage.nvim (which in turn follows snacks.nvim):
--- lazy.nvim installs mini.test and luassert into a stdpath isolated under
--- .tests/, then runs every tests/**/*_spec.lua file.
+-- Install isolated dependencies under .tests/ and run mini.test specs.
 vim.env.LAZY_STDPATH = ".tests"
 
--- Prefer an existing lazy.nvim checkout so the runner works offline for the
--- bootstrap itself; fall back to lazy.nvim's official bootstrap.
+vim.cmd("filetype plugin on")
+
+-- Reuse a local lazy.nvim checkout so bootstrap can run offline.
 local lazy_candidates = {
   vim.fn.fnamemodify("~/.local/share/nvim/lazy/lazy.nvim", ":p"),
   vim.fn.fnamemodify("~/.local/share/nvim/site/pack/lazy/start/lazy.nvim", ":p"),
@@ -30,7 +29,6 @@ else
   load(vim.fn.system("curl -s https://raw.githubusercontent.com/folke/lazy.nvim/main/bootstrap.lua"), "bootstrap.lua")()
 end
 
--- Setup lazy.nvim and, with --minitest, run the collected specs.
 require("lazy.minit").setup({
   spec = {
     { dir = vim.uv.cwd() },

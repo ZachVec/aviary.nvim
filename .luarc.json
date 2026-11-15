@@ -2,6 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
   "runtime.version": "LuaJIT",
   "diagnostics.globals": ["vim"],
+  "diagnostics.unusedLocalExclude": ["_*"],
   "workspace.library": ["lua", "${env:VIMRUNTIME}/lua", "${3rd}/busted/library", "${3rd}/luassert/library"],
   "workspace.ignoreDir": [".tests"]
 }

@@ -1,0 +1,174 @@
+*pigeon.nvim.txt*                                        pigeon · aviary.nvim
+
+==============================================================================
+Table of Contents                              *pigeon.nvim-table-of-contents*
+
+1. Usage                                                   |pigeon.nvim-usage|
+2. Templates                                           |pigeon.nvim-templates|
+3. File and buffer references         |pigeon.nvim-file-and-buffer-references|
+4. Selected text                                   |pigeon.nvim-selected-text|
+5. Exporting and selection               |pigeon.nvim-exporting-and-selection|
+*pigeon.nvim*
+
+pigeon
+
+*pigeon.nvim-introduction*
+
+Compose templates, file/buffer references, or selected text and export them to
+the clipboard or one tmux pane. See installation |aviary.nvim-installation| and
+requirements |aviary.nvim-requirements| in the README.
+
+
+==============================================================================
+1. Usage                                                   *pigeon.nvim-usage*
+
+*pigeon.nvim-api* *pigeon.nvim-flows* *pigeon.prompt()* *pigeon.files()*
+*pigeon.buffers()* *pigeon.text()*
+
+>lua
+    local pigeon = require("aviary").pigeon
+
+    pigeon.prompt()   -- pick a named template
+    pigeon.files()    -- pick file references
+    pigeon.buffers()  -- pick buffer references
+    pigeon.text()     -- export the selection or current line
+<
+
+These calls take no arguments and have no return value. Map them yourself:
+
+>lua
+    vim.keymap.set("n", "<leader>pp", function() require("aviary").pigeon.prompt() end)
+    vim.keymap.set("n", "<leader>pf", function() require("aviary").pigeon.files() end)
+    vim.keymap.set("n", "<leader>pb", function() require("aviary").pigeon.buffers() end)
+    vim.keymap.set({ "n", "x" }, "<leader>pt", function() require("aviary").pigeon.text() end)
+<
+
+
+==============================================================================
+2. Templates                                           *pigeon.nvim-templates*
+
+*pigeon.nvim-prompts* *pigeon.nvim-configuration*
+
+`prompt()` picks a template by name. Supported placeholders are:
+
+  Placeholder   Content
+  ------------- --------------------------------------------
+  {file}        Reference to the invoking buffer’s file
+  {line}        Reference to that file and the cursor line
+The filename and cursor are captured before the picker opens. Unknown
+placeholders remain literal and produce a warning when the template is used.
+Literal text, spacing and punctuation are preserved.
+
+>lua
+    require("aviary").setup({
+      pigeon = {
+        prompts = {
+          ["{file}"] = "{file}", -- built-in
+          ["{line}"] = "{line}", -- built-in
+          review = "Review {file} for bugs.",
+        },
+        references = { join = "\n" }, -- default separator for file/buffer references
+      },
+    })
+<
+
+`prompts` maps names to string templates. Entries add to the built-ins; a
+matching name overrides its template.
+
+
+==============================================================================
+3. File and buffer references         *pigeon.nvim-file-and-buffer-references*
+
+*pigeon.nvim-files-and-buffers*
+
+`files()` lists files under Neovim’s global cwd (`:cd`), using the first
+available tool among fd, rg, and find. The tools follow symlinks and exclude
+`.git`; find does not apply ignore files. The resolved tool reports its own
+failure without falling through to another tool.
+
+`buffers()` lists named, listed, normal buffers backed by readable files, most
+recently used first. `[+]` marks modified buffers. Preview shows live buffer
+contents, while the exported value is a file reference.
+
+Selected references use `pigeon.references.join` as their separator. Cancelling
+exports nothing. Closing or hiding a file picker stops its listing. Paths and
+separators are captured before delivery; later source changes do not alter a
+pending export. A reference-format failure sends no partial list.
+
+
+==============================================================================
+4. Selected text                                   *pigeon.nvim-selected-text*
+
+`text()` exports whole lines from the active visual selection, or the current
+line. Use a Lua callback or `<Cmd>` visual mapping to preserve the selection.
+Text is sent verbatim, including empty text, with no placeholder expansion.
+
+
+==============================================================================
+5. Exporting and selection               *pigeon.nvim-exporting-and-selection*
+
+These settings also apply to hawk’s comment exports:
+
+>lua
+    require("aviary").setup({
+      picker = { implementation = "native" }, -- native | fzf-lua | snacks
+      exporter = {
+        default = "clipboard", -- clipboard | tmux
+        format = function(file, loc)
+          return file .. (loc and " " .. loc or "")
+        end,
+      },
+    })
+<
+
+  -----------------------------------------------------------------------------
+  Picker                              Selection
+  ----------------------------------- -----------------------------------------
+  native                              vim.ui.select: one choice, no preview
+
+  fzf-lua                             Requires fzf-lua
+                                      <https://github.com/ibhagwan/fzf-lua>;
+                                      multi-select and previews
+
+  snacks                              Requires snacks.nvim
+                                      <https://github.com/folke/snacks.nvim>;
+                                      multi-select and previews
+  -----------------------------------------------------------------------------
+The selected picker must be installed. Files and buffers support multi-select
+with fzf-lua or snacks; outlet and tmux target selection use one choice.
+
+>lua
+    local exporter = require("aviary.shared.exporter")
+    exporter.select()   -- choose the outlet for all features
+    exporter.retarget() -- choose another tmux pane
+    exporter.status()   -- show the outlet and target
+<
+
+All three calls take no arguments and have no return value. Cancelling a choice
+preserves the previous selection.
+
+Clipboard exports write the `+` register and require a working clipboard
+provider. References use absolute paths. Copy success confirms the provider
+request, not external receipt; providers such as OSC52 cannot acknowledge it.
+
+Tmux exports paste verbatim into one sibling pane in Neovim’s current tmux
+window, without pressing Enter. One candidate is chosen directly; several open
+a picker. The pane is remembered across exports and outlet switches. Use
+`retarget()` after a pane closes or to choose another one. Export failures
+report an error and retain the target for explicit retargeting.
+
+Tmux references use the target’s current cwd and running command. Paths below
+that cwd become relative; others remain absolute. Built-in formats are
+`@file#L12-15` for Claude and `file :L12-15` for Codex. Other commands and the
+clipboard use `exporter.format(file, loc)`: `file` is the spelled path and
+`loc` is nil, `:L12`, or `:L12-15`. Return a nonempty string; nil or an empty
+string declines the reference and prevents the whole export.
+
+*pigeon.nvim-health*
+
+Run `:checkhealth aviary.pigeon` for picker/template checks and `:checkhealth
+aviary.shared.exporter` for outlet checks.
+
+Generated by panvimdoc <https://github.com/kdheepak/panvimdoc>
+
+vim:tw=78:ts=8:noet:ft=help:norl:

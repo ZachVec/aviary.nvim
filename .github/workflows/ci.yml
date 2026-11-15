@@ -23,8 +23,11 @@ jobs:
           sudo tar -xzf /tmp/nvim.tar.gz -C /opt
           sudo ln -sf /opt/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim
 
-      # The test bootstrap installs luassert through lazy.nvim's hererocks,
-      # which builds Lua 5.1 from source and needs the readline headers.
+      # Pigeon integration specs create isolated tmux test servers.
+      - name: Install tmux
+        run: sudo apt-get install -y --no-install-recommends tmux
+
+      # lazy.nvim's hererocks builds Lua 5.1 for luassert and needs readline headers.
       - name: Install Lua build dependencies
         run: sudo apt-get install -y --no-install-recommends libreadline-dev
 
@@ -35,7 +38,5 @@ jobs:
           version: latest
           args: --check .
 
-      # `make check` would also run lua-language-server, which CI does not
-      # install; the format step above covers the same ground here.
       - name: Test
         run: make test

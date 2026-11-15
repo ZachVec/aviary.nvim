@@ -1,39 +1,66 @@
+# Neovim exports NVIM as a socket path to child processes. Use NVIM=nvim
+# (or unset NVIM) when running make from inside Neovim.
 NVIM ?= nvim
 NVIM_LOG ?= /tmp/aviary-nvim.log
 MASON_BIN ?= $(HOME)/.local/share/nvim/mason/bin
 
-# Resolve a tool from PATH, falling back to the mason bin directory.
+# Prefer PATH tools, then Mason.
 find_tool = $(or $(shell command -v $(1) 2>/dev/null),$(if $(wildcard $(MASON_BIN)/$(1)),$(MASON_BIN)/$(1)))
 
 STYLUA := $(call find_tool,stylua)
 LUA_LS := $(call find_tool,lua-language-server)
+MARKSMAN := $(call find_tool,marksman)
 
-# lua-language-server resolves `${env:VIMRUNTIME}/lua` (see .luarc.json), where
-# Neovim's own `vim.*` annotations live. Without it `vim.api` is untyped and
-# every diagnostic about it is silently skipped, so derive the runtime from the
-# same Neovim the tests run on.
+# Use this Neovim's runtime types so LuaLS can check vim.* calls.
 NVIM_RUNTIME = $(shell $(NVIM) --headless -u NONE -i NONE -c 'lua io.write(vim.env.VIMRUNTIME)' -c 'qa' 2>/dev/null)
 
-# `nvim --headless -l` falls back to a `nvim.log` in cwd when the user's main
-# nvim holds the default log lock; pin the log to /tmp to keep the repo clean.
+# Avoid cwd/nvim.log when the editor holds the default log lock.
 NVIM_RUN = NVIM_LOG_FILE=$(NVIM_LOG) $(NVIM) --headless -u NONE -l
 
-.PHONY: check style lint test
+.PHONY: check style lint links docs-check test test-hawk test-weaver test-picker test-pigeon test-message
 
-## check: Lua format + diagnostics + the mini.test suite
-check: style lint test
+## check: Lua format + diagnostics + the mini.test suite + markdown links
+check: style lint test links
 
 ## style: check Lua formatting (stylua)
 style:
 	@if [ -n "$(STYLUA)" ]; then $(STYLUA) --check .; else echo "note: stylua not installed; skipping Lua format check"; fi
 
 ## lint: check Lua diagnostics (lua-language-server)
+## Include hints such as unused locals; _* locals are exempt.
 lint:
-	@if [ -n "$(LUA_LS)" ]; then VIMRUNTIME="$(NVIM_RUNTIME)" $(LUA_LS) --check="$(CURDIR)" --checklevel=Warning --configpath="$(CURDIR)/.luarc.json"; else echo "note: lua-language-server not installed; skipping Lua diagnostics"; fi
+	@if [ -n "$(LUA_LS)" ]; then VIMRUNTIME="$(NVIM_RUNTIME)" $(LUA_LS) --check="$(CURDIR)" --checklevel=Hint --configpath="$(CURDIR)/.luarc.json"; else echo "note: lua-language-server not installed; skipping Lua diagnostics"; fi
+
+## links: check markdown doc links (marksman; skipped when it is not installed)
+links:
+	@if [ -n "$(MARKSMAN)" ]; then MARKSMAN="$(MARKSMAN)" $(NVIM_RUN) tests/doc_links.lua; else echo "note: marksman not installed; skipping markdown link check"; fi
+
+## docs-check: generate user help and verify the Pandoc pipeline (requires pinned Pandoc)
+docs-check:
+	@./scripts/docs
+	@bash tests/docs/generation
 
 ## test: run the mini.test suite (tests/**/*_spec.lua)
-## --offline skips lazy.nvim's per-run update check, which otherwise reaches
-## the network on every run. The first run still installs the test dependencies
-## into .tests/; `rm -rf .tests` is how you ask for a fresh install.
+## Reuse .tests/ dependencies offline; the first run installs them.
 test:
 	@$(NVIM_RUN) tests/minit.lua --minitest --offline
+
+## test-hawk: run only hawk's specs (tests/hawk/**/*_spec.lua)
+test-hawk:
+	@$(NVIM_RUN) tests/minit.lua --minitest --offline $(shell find tests/hawk -name '*_spec.lua' | sort)
+
+## test-picker: run only the Weaver's private picker specs (tests/weaver/picker/*_spec.lua)
+test-picker:
+	@$(NVIM_RUN) tests/minit.lua --minitest --offline $(shell find tests/weaver/picker -name '*_spec.lua' | sort)
+
+## test-pigeon: receiver routing, clipboard, and real tmux/floating-view specs (requires Unix sockets and python3)
+test-pigeon:
+	@$(NVIM_RUN) tests/minit.lua --minitest --offline $(shell find tests/pigeon -name '*_spec.lua' | sort)
+
+## test-weaver: run Weaver collectors and private picker specs
+test-weaver:
+	@$(NVIM_RUN) tests/minit.lua --minitest --offline $(shell find tests/weaver -name '*_spec.lua' | sort)
+
+## test-message: run the shared Message contracts
+test-message:
+	@$(NVIM_RUN) tests/minit.lua --minitest --offline tests/shared/message_spec.lua
