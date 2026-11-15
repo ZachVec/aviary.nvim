@@ -5,22 +5,25 @@ Table of Contents                              *aviary.nvim-table-of-contents*
 
 1. Requirements                                     |aviary.nvim-requirements|
 2. Installation                                     |aviary.nvim-installation|
-3. Default Options                               |aviary.nvim-default-options|
-4. License                                               |aviary.nvim-license|
+3. Workflows                                           |aviary.nvim-workflows|
+4. Default Options                               |aviary.nvim-default-options|
+5. License                                               |aviary.nvim-license|
 *aviary.nvim*
 
 aviary.nvim
 
-Review Git changes, annotate code, and compose text for the clipboard or tmux.
+Review Git changes and send references or text to the clipboard or tmux.
 
   -----------------------------------------------------------------------
   Feature                             Use it for
   ----------------------------------- -----------------------------------
-  hawk |hawk.nvim|                    Review repository changes and
-                                      manage session comments.
+  hawk |hawk.nvim|                    Review Git versions.
 
-  pigeon |pigeon.nvim|                Export templates, file/buffer
-                                      references, and selected text.
+  weaver |weaver.nvim|                Capture templates, file/buffer and
+                                      line references, and selected text.
+
+  pigeon |pigeon.nvim|                Create and select receivers,
+                                      display them, and deliver Messages.
   -----------------------------------------------------------------------
 
 ==============================================================================
@@ -28,10 +31,12 @@ Review Git changes, annotate code, and compose text for the clipboard or tmux.
 
 *pigeon.nvim-requirements*
 
-- Neovim 0.11+; Git for hawk.
+- Neovim 0.11+; Git for Review.
 - A working Neovim clipboard provider for clipboard exports.
-- Optional: tmux 3.0+ for pane exports; fzf-lua <https://github.com/ibhagwan/fzf-lua>
-    or snacks.nvim <https://github.com/folke/snacks.nvim> for multi-select and previews.
+- Optional: tmux 3.8+ for native floating tool views; Neovim must run inside an
+    existing tmux server.
+- `weaver.files()` and `weaver.buffers()` require snacks.nvim <https://github.com/folke/snacks.nvim>
+    or fzf-lua <https://github.com/ibhagwan/fzf-lua>. Other choices use `vim.ui.select`.
 
 
 ==============================================================================
@@ -46,119 +51,117 @@ Install with lazy.nvim:
       "ZachVec/aviary.nvim",
       main = "aviary",
       opts = {
-        picker = { implementation = "native" }, -- native | fzf-lua | snacks
-        exporter = { default = "clipboard" },   -- clipboard | tmux
+        weaver = { picker = "snacks" }, -- snacks | fzf-lua; files/buffers only
+        pigeon = { backend = { default = "clipboard" } }, -- clipboard | tmux
       },
       keys = {
-        { "<leader>ar", function() require("aviary").hawk.review() end, desc = "Review changes" },
-        { "<leader>ac", function() require("aviary").hawk.comment() end, mode = { "n", "x" }, desc = "Add comment" },
-        { "<leader>af", function() require("aviary").pigeon.files() end, desc = "Export file references" },
+        { "<leader>ar", function() require("aviary").hawk.show() end, desc = "Review changes" },
+        { "<leader>ac", function() require("aviary").weaver.prompt() end, mode = { "n", "x" }, desc = "Choose prompt" },
+        { "<leader>af", function() require("aviary").weaver.files() end, desc = "Send file references" },
+        { "<leader>ap", function() require("aviary").pigeon.show() end, desc = "Show receiver" },
       },
     }
 <
 
-See the feature manuals above, or |hawk.nvim| and |pigeon.nvim|, for usage and
-configuration. Shared export and picker settings
-|pigeon.nvim-exporting-and-selection| apply to both features.
+See the feature manuals above, or |hawk.nvim|, |weaver.nvim| and |pigeon.nvim|.
+Receiver settings |pigeon.nvim-exporting-and-selection| apply to every Message
+passed to Pigeon. Use `pigeon.pick()` to choose and display a new tool or an
+existing target on the default backend. For floating tool views, set
+`pigeon.backend.default = "tmux"` and call `pigeon.show()`; without a current
+target it opens the same picker first. Receivers and views use Neovim’s tmux
+server. Renaming a receiver window does not affect discovery. `C-.` returns to
+Neovim with the tool still running. Creation, evaluation, display and delivery
+failures warn and clear current. The next explicit action selects again. Use
+`pigeon.pick()` to switch explicitly; failed requests are never automatically
+replayed.
+
+Root setup accepts public feature names; nested tables belong to their feature.
+Each call rebuilds from feature defaults and the current options. Previously
+root-configured features omitted from the call also reset to defaults;
+`setup()` and `setup({})` reset all such features. Features never configured
+through root are left untouched. Calling `aviary.<feature>.setup(opts)`
+directly rebuilds only that feature. Modules load lazily by name. Setup
+validates data and acquires no runtime resources.
 
 
 ==============================================================================
-3. Default Options                               *aviary.nvim-default-options*
+3. Workflows                                           *aviary.nvim-workflows*
+
+Weaver actions |weaver.nvim-usage| capture content and send it through
+Pigeon’s current/default target; Hawk |hawk.nvim| opens Git Review:
+
+>lua
+    local aviary = require("aviary")
+    aviary.weaver.prompt()  -- choose a template; {line} uses the cursor line or Visual range
+    aviary.weaver.files()   -- choose file references and send them
+    aviary.weaver.buffers() -- choose buffer references and send them
+    aviary.weaver.text()    -- send the active Visual lines or cursor line
+    aviary.hawk.show()      -- inspect changed files and two Git versions
+<
+
+All actions take no arguments and return nothing. Text capture delivers
+immediately; selectors deliver after confirmation. Prompt context, including
+any Visual range, is captured before template selection. Resuming a file/buffer
+picker can send again. Cancellation sends nothing. `hawk.show()` opens or
+focuses its single reusable Review tab. Review defaults to HEAD → index,
+following HEAD on refresh; Enter displays the selected file’s captured
+versions in native diff. b/B and f/F choose refs/commits, and t toggles
+merge-base comparison. Creation errors propagate after rollback. Asynchronous
+Review failures report once and leave the UI available for retry.
+
+Choose the `{line}` prompt for the current file and cursor line or Visual
+range. This replaces the former Hawk comment action; there is no comment input
+or stored comment list. Setup configuration stays under feature names.
+
+
+==============================================================================
+4. Default Options                               *aviary.nvim-default-options*
 
 Default Options ~
 
 >lua
     require("aviary").setup({
       hawk = {
-        highlights = {
-          meta = "qfLineNr",
+        keymaps = {
+          close = { "q" }, refresh = { "r" }, jump = { "<CR>" },
+          base_ref = { "b" }, base_commit = { "B" },
+          target_ref = { "f" }, target_commit = { "F" }, toggle = { "t" },
         },
-        review = {
-          keymaps = { close = { "q" }, jump = { "<CR>" }, refresh = { "r" }, switch_base = { "<Tab>" } },
-          actions = {
-            close = function(list)
-              list:close()
-            end,
-            refresh = function(list)
-              list:refresh()
-            end,
-            jump = function(list, item)
-              list:jump(item)
-            end,
-            switch_base = function(list)
-              list:switch_base()
-            end,
-          },
-        },
-        comments = {
-          keymaps = {
-            close = { "q" },
-            jump = { "<CR>" },
-            edit = { "e" },
-            remove = { "x" },
-            send = { "s" },
-            send_all = { "S" },
-            clear = { "X" },
-            refresh = { "r" },
-          },
-          actions = {
-            close = function(list)
-              list:close()
-            end,
-            refresh = function(list)
-              list:refresh()
-            end,
-            jump = function(list, item)
-              list:jump(item)
-            end,
-            edit = function(list, item)
-              list:edit(item)
-            end,
-            remove = function(list, item)
-              list:remove(item)
-            end,
-            send = function(list, item)
-              list:send(item)
-            end,
-            send_all = function(list)
-              list:send_all()
-            end,
-            clear = function(list)
-              list:clear()
-            end,
-          },
-        },
+        actions = {}, -- handlers receive the owning Review Tab
+      },
+      weaver = {
+        picker = "snacks",
+        prompts = { ["{file}"] = "{file} ", ["{line}"] = "{line} " },
+        resolvers = {}, -- merges over built-in file/line resolvers
+        references = { join = "\n" },
       },
       pigeon = {
-        --- Named prompt templates offered by the prompt flow. The built-ins are the
-        --- raw references; user entries merge additively, so a name you set
-        --- overrides the built-in while names you leave unset are kept.
-        prompts = {
-          ["{file}"] = "{file}",
-          ["{line}"] = "{line}",
-        },
-        --- The files/buffers flow's options.
-        references = {
-          --- Separator between references: "\n" puts one per line, " " one line.
-          join = "\n",
-        },
-      },
-      picker = {
-        --- Which selection UI to render every pick through.
-        implementation = "native",
-      },
-      exporter = {
-        default = "clipboard",
-        format = function(file, loc)
-          return file .. (loc and " " .. loc or "")
+        format = function(path, first, last)
+          if not first then return path end
+          return path .. " :L" .. first .. (last and last ~= first and "-" .. last or "")
         end,
+        tools = {
+          codex = { command = { "codex" } }, -- uses pigeon.format
+          claude = {
+            command = { "claude" },
+            format = function(path, first, last)
+              local mention = path:find("[^%w/_%.%-]") and ('"' .. path .. '"') or path
+              return "@" .. mention .. (first and "#L" .. first or "")
+                .. (first and last and last ~= first and "-" .. last or "")
+            end,
+          },
+        },
+        backend = {
+          default = "clipboard",
+          tmux = { width = "90%", height = "90%", close = "C-." },
+        },
       },
     })
 <
 
 
 ==============================================================================
-4. License                                               *aviary.nvim-license*
+5. License                                               *aviary.nvim-license*
 
 MIT
 
