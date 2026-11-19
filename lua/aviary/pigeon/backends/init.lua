@@ -1,29 +1,38 @@
---- Private synchronous backend contracts. Backends return complete data.
---- Choice strings are stable destination identities and display text.
---- An existing Choice and its resolved Target stringify identically. Creation
---- choices acquire nothing until synchronous resolve, which returns a complete
---- Target or raises after best-effort rollback. Eval returns complete text before
---- send writes it. Operation errors propagate; backends do not report them.
----@alias aviary.pigeon.BackendName "clipboard"|"tmux"
-
----@class aviary.pigeon.Target
----@field __tostring fun(self: aviary.pigeon.Target): string stable unique display string
----@field show fun(self: aviary.pigeon.Target) raise on execution failure
----@field eval fun(self: aviary.pigeon.Target, message: aviary.shared.Message): string evaluate completely; raise on failure
----@field send fun(self: aviary.pigeon.Target, text: string) write evaluated text; raise on failure
+--- Private synchronous backend contracts. Each backend supplies its own Choices
+--- and Agents. No resources are acquired until a Choice resolves or an Agent
+--- attaches. Calls raise on failure; backends do not notify or replay.
+--- Choice ids are stable and unique within one backend's Choice list; strings
+--- are display only. An Agent's client handle belongs to its Terminal.
+---@alias aviary.pigeon.BackendName "tmux"
 
 ---@class aviary.pigeon.Choice
----@field __tostring fun(self: aviary.pigeon.Choice): string stable unique display string
----@field resolve fun(self: aviary.pigeon.Choice): aviary.pigeon.Target synchronous; no resource acquisition until selected
+---@field id fun(self: self): string stable identity within this backend; creation choices return their creation intent
+---@field __tostring fun(self: self): string display label
+---@field resolve fun(self: self): aviary.pigeon.Agent resolve synchronously; creation failures roll back acquired resources
+
+--- An Agent is also a Choice: it is an existing selectable target and resolves
+--- to itself. Creation intents remain Choice-only implementations.
+---@class aviary.pigeon.Agent: aviary.pigeon.Choice
+---@field attach fun(self: self): string[] command that directly attaches one client to this Agent's session
+---@field retarget fun(self: self, client: string) move an existing client to this Agent; raises on failure
+---@field eval fun(self: self, message: aviary.shared.Message): string completely evaluate the borrowed Message in this Agent's context; raises on failure
+---@field send fun(self: self, text: string) deliver without focusing or submitting; empty text is ignored
 
 ---@class aviary.pigeon.Backend
----@field list fun(): aviary.pigeon.Choice[] complete inventory, including supported tool creation choices
+---@field list fun(): aviary.pigeon.Choice[] current inventory, including supported tool creation choices
+
 ---@class aviary.pigeon.Backends
----@field get fun(name: aviary.pigeon.BackendName): aviary.pigeon.Backend
+---@field list fun(): aviary.pigeon.Choice[] current inventory from the configured backend
+---@field checkhealth fun(name: aviary.pigeon.BackendName) run read-only backend diagnostics
 local M = {}
 
-function M.get(name)
-  return require("aviary.pigeon.backends." .. name)
+function M.list()
+  local name = require("aviary.pigeon.config")().backend
+  return require("aviary.pigeon.backends." .. name).list()
+end
+
+function M.checkhealth(name)
+  require("aviary.pigeon.backends." .. name .. ".health").check()
 end
 
 return M

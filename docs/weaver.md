@@ -9,6 +9,7 @@ Capture editor input, compose Messages, and send them through Pigeon. See
 
 ```lua
 local aviary = require("aviary")
+aviary.pigeon.pick()    -- choose/create an Agent before sending
 aviary.weaver.prompt()  -- choose a named template and send it
 aviary.weaver.files()   -- choose file references and send them
 aviary.weaver.buffers() -- choose buffer references and send them
@@ -16,7 +17,8 @@ aviary.weaver.text()    -- send selection or current line
 ```
 
 All four actions take no arguments and return nothing. They send complete
-Messages through Pigeon's current/default target. Cancellation sends nothing.
+Messages through Pigeon's current Agent; call `pigeon.pick()` or `pigeon.show()`
+first. A send without a current Agent warns and sends nothing. Cancellation sends nothing.
 `text` captures and sends immediately, including an empty line; selectors send
 after confirmation. Startup and resolver errors propagate; delivery failures
 follow [Pigeon's notification contract](./pigeon.md#usage).
@@ -47,7 +49,7 @@ Capture exits Visual mode before opening the template picker. Use a Lua callback
 or `<Cmd>` Visual mapping to retain the active selection until capture. The
 Selection and prompt configuration are captured before opening the picker. Later
 focus, source edits, renames or deletion do not change the captured Selection;
-setup changes apply to the next invocation. The target applies its own cwd and
+setup changes apply to the next invocation. The Agent applies its own cwd and
 reference formatter.
 Tokens without a configured resolver are sent verbatim. Literal spacing,
 punctuation, percent signs and newlines are preserved. The two built-in templates
@@ -121,7 +123,7 @@ outside cwd remain selectable. Results contain references, not buffer contents.
 The selected picker provides discovery and previews. Each confirmation captures
 the selected paths and separator and delivers a complete Message after picker
 cleanup. Resuming and confirming the picker sends a new Message through Pigeon's
-current target at delivery time.
+current Agent at delivery time.
 Prompt choices follow the global `vim.ui.select` configuration independently of
 the file/buffer picker.
 
@@ -135,4 +137,4 @@ Text is verbatim, including empty text, with no placeholder expansion.
 ## Health
 
 Run `:checkhealth aviary.weaver` for Neovim, picker selection and prompt count.
-Receiver configuration and tool launching belong to [pigeon](./pigeon.md).
+Agent configuration and tool launching belong to [pigeon](./pigeon.md).

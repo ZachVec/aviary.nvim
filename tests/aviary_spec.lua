@@ -299,7 +299,7 @@ describe("aviary", function()
     for _, spec in ipairs({
       { name = "aviary.hawk", opts = { keymaps = { close = { "Q" } } } },
       { name = "aviary.weaver", opts = { picker = "snacks", references = { join = " " } } },
-      { name = "aviary.pigeon", opts = { backend = { default = "tmux" } } },
+      { name = "aviary.pigeon", opts = { view = { width = 0.8 } } },
     }) do
       local module = require(spec.name)
       local config = require(spec.name .. ".config")
@@ -332,9 +332,9 @@ describe("aviary", function()
       {
         name = "pigeon",
         path = "aviary.pigeon",
-        valid = { backend = { default = "tmux" } },
-        invalid = { backend = { default = "missing" } },
-        field = "backend.default",
+        valid = { view = { width = 0.8 } },
+        invalid = { view = { width = false } },
+        field = "view width/height",
       },
     }) do
       local module = require(spec.path)

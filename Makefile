@@ -53,7 +53,7 @@ test-hawk:
 test-picker:
 	@$(NVIM_RUN) tests/minit.lua --minitest --offline $(shell find tests/weaver/picker -name '*_spec.lua' | sort)
 
-## test-pigeon: receiver routing, clipboard, and real tmux/floating-view specs (requires Unix sockets and python3)
+## test-pigeon: live target routing and real tmux/Neovim Terminal specs (requires Unix sockets and python3)
 test-pigeon:
 	@$(NVIM_RUN) tests/minit.lua --minitest --offline $(shell find tests/pigeon -name '*_spec.lua' | sort)
 

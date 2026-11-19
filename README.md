@@ -1,21 +1,20 @@
 # aviary.nvim
 
-Review Git changes and send references or text to the clipboard or tmux.
+Review Git changes and send references or text to agents displayed in Neovim.
 
 | Feature | Use it for |
 | --- | --- |
 | [hawk](./docs/hawk.md) | Review Git versions. |
 | [weaver](./docs/weaver.md) | Capture templates, file/buffer and line references, and selected text. |
-| [pigeon](./docs/pigeon.md) | Create and select receivers, display them, and deliver Messages. |
+| [pigeon](./docs/pigeon.md) | Create agents, display them in a Terminal, and deliver Messages. |
 
 ## Requirements
 
 <!-- vimdoc: pigeon.nvim-requirements -->
 
 - Neovim 0.11+; Git for Review.
-- A working Neovim clipboard provider for clipboard exports.
-- Optional: tmux 3.8+ for native floating tool views; Neovim must run inside an
-  existing tmux server.
+- Pigeon: tmux 3.8+; Neovim must run inside tmux on the default socket.
+- An installed agent CLI, such as Codex or Claude, to create its tool instance.
 - `weaver.files()` and `weaver.buffers()` require [snacks.nvim](https://github.com/folke/snacks.nvim)
   or [fzf-lua](https://github.com/ibhagwan/fzf-lua). Other choices use `vim.ui.select`.
 
@@ -31,28 +30,25 @@ Install with lazy.nvim:
   main = "aviary",
   opts = {
     weaver = { picker = "snacks" }, -- snacks | fzf-lua; files/buffers only
-    pigeon = { backend = { default = "clipboard" } }, -- clipboard | tmux
   },
   keys = {
     { "<leader>ar", function() require("aviary").hawk.show() end, desc = "Review changes" },
     { "<leader>ac", function() require("aviary").weaver.prompt() end, mode = { "n", "x" }, desc = "Choose prompt" },
     { "<leader>af", function() require("aviary").weaver.files() end, desc = "Send file references" },
-    { "<leader>ap", function() require("aviary").pigeon.show() end, desc = "Show receiver" },
+    { "<leader>ap", function() require("aviary").pigeon.show() end, desc = "Show agent" },
   },
 }
 ```
 
 See the feature manuals above, or `:h hawk.nvim`, `:h weaver.nvim` and
-`:h pigeon.nvim`. [Receiver settings](./docs/pigeon.md#exporting-and-selection)
-apply to every Message passed to Pigeon. Use `pigeon.pick()` to choose and display
-a new tool or an existing target on the default backend. For floating tool views, set
-`pigeon.backend.default = "tmux"` and call `pigeon.show()`; without a current
-target it opens the same picker first. Receivers and views use Neovim's tmux server.
-Renaming a receiver window does not affect discovery. `C-.` returns to Neovim with
-the tool still running.
-Creation, evaluation, display and delivery failures warn and clear current. The
-next explicit action selects again. Use `pigeon.pick()` to switch explicitly; failed requests
-are never automatically replayed.
+`:h pigeon.nvim`. Use `pigeon.pick()` to choose an Agent or create a tool instance;
+`pigeon.show()` reopens this editor's Terminal and picks when no Agent is attached.
+`<C-.>` hides it while the Agent keeps running. Select an Agent before sending
+through Pigeon or Weaver. Each Neovim attaches its own client directly to the
+chosen Agent session; sending uses that Terminal's current Agent. Agent exit
+closes attached Terminals naturally. See
+[selection and display](./docs/pigeon.md#exporting-and-selection) for configuration.
+Failed requests warn once and are never automatically replayed.
 
 Root setup accepts public feature names; nested tables belong to their feature.
 Each call rebuilds from feature defaults and the current options. Previously
@@ -65,10 +61,11 @@ acquires no runtime resources.
 ## Workflows
 
 [Weaver actions](./docs/weaver.md#usage) capture content and send it through
-Pigeon's current/default target; [Hawk](./docs/hawk.md) opens Git Review:
+Pigeon's current Agent; [Hawk](./docs/hawk.md) opens Git Review:
 
 ```lua
 local aviary = require("aviary")
+aviary.pigeon.pick()    -- choose/create an Agent before using Weaver
 aviary.weaver.prompt()  -- choose a template; {line} uses the cursor line or Visual range
 aviary.weaver.files()   -- choose file references and send them
 aviary.weaver.buffers() -- choose buffer references and send them
@@ -128,10 +125,9 @@ require("aviary").setup({
         end,
       },
     },
-    backend = {
-      default = "clipboard",
-      tmux = { width = "90%", height = "90%", close = "C-." },
-    },
+    keymaps = { close = { "<C-.>" } },
+    actions = {}, -- the built-in close closes the current window
+    view = { width = 0.9, height = 0.9, border = "rounded" },
   },
 })
 ```

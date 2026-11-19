@@ -1,47 +1,57 @@
---- Pigeon owns tool definitions and backend options; setup acquires no resources.
---- Setup rebuilds from defaults, rejects unknown structural fields and preserves
---- current options on failure. It validates configuration data without checking
---- executable availability, versions, runtime context or key conflicts.
---- Default formatting uses plain paths and :L ranges; Claude uses @ mentions,
---- #L ranges and quotes unusual paths.
+--- Pigeon owns tool definitions, Terminal options and action bindings; setup
+--- acquires no resources. Setup rebuilds from defaults, rejects unknown
+--- structural fields and preserves current options on failure. It validates
+--- configuration data without checking executable availability, versions,
+--- runtime context or key conflicts. Key sets replace defaults; actions merge
+--- over built-ins. Default formatting uses plain paths and :L ranges; Claude
+--- uses @ mentions, #L ranges and quotes unusual paths.
 
 ---@class aviary.pigeon.Tool
 ---@field command string[] nonempty argv, passed directly to the backend at creation
 ---@field format? aviary.shared.message.Format local override; nil uses Config.format at each send
 
----@class aviary.pigeon.TmuxConfig
----@field width string tmux size including the border: positive integer cells or percentage
----@field height string tmux size including the border: positive integer cells or percentage
----@field close string tmux key that detaches only the floating view's client
+---@alias aviary.pigeon.Actions table<string, fun()> action name to handler
+---@alias aviary.pigeon.Keymaps table<string, string[]> action name to complete key set; empty disables
+
+---@class aviary.pigeon.ViewConfig
+---@field width number fraction of editor columns in (0, 1], or integer cells > 1
+---@field height number fraction of editor lines in (0, 1], or integer cells > 1
+---@field border "none"|"single"|"double"|"rounded"|"solid"|"shadow"
 
 ---@class aviary.pigeon.Config
----@field format aviary.shared.message.Format default for clipboard and tools without an override
+---@field backend aviary.pigeon.BackendName
+---@field format aviary.shared.message.Format default for tools without an override
 ---@field tools table<string, aviary.pigeon.Tool>
----@field backend { default: aviary.pigeon.BackendName, tmux: aviary.pigeon.TmuxConfig }
+---@field keymaps aviary.pigeon.Keymaps mappings installed in the Terminal buffer
+---@field actions aviary.pigeon.Actions handlers called by those mappings
+---@field view aviary.pigeon.ViewConfig
 
 ---@class aviary.pigeon.ConfigOverrides
+---@field backend? aviary.pigeon.BackendName
 ---@field format? aviary.shared.message.Format
 ---@field tools? table<string, aviary.pigeon.ToolOverrides> built-ins may be partially overridden; custom tools require command
----@field backend? { default?: aviary.pigeon.BackendName, tmux?: aviary.pigeon.TmuxConfigOverrides }
+---@field keymaps? aviary.pigeon.Keymaps each action's key set replaces its defaults; {} disables it
+---@field actions? aviary.pigeon.Actions built-in overrides and user-defined handlers
+---@field view? aviary.pigeon.ViewConfigOverrides
 
 ---@class aviary.pigeon.ToolOverrides
 ---@field command? string[]
 ---@field format? aviary.shared.message.Format
 
----@class aviary.pigeon.TmuxConfigOverrides
----@field width? string
----@field height? string
----@field close? string
+---@class aviary.pigeon.ViewConfigOverrides
+---@field width? number
+---@field height? number
+---@field border? "none"|"single"|"double"|"rounded"|"solid"|"shadow"
 
 --- Config() returns borrowed, read-only running options.
 ---@class aviary.pigeon.ConfigModule
 ---@field setup fun(opts?: aviary.pigeon.ConfigOverrides): boolean, string? validation failure leaves previous options unchanged
----@field tmux_close_arg string read-only prepared tmux argument; raw key remains in Config().backend.tmux.close
 ---@operator call:aviary.pigeon.Config
 local M = {}
 
 ---@type aviary.pigeon.Config
 local defaults = {
+  backend = "tmux",
   format = function(path, start_row, end_row)
     if not start_row then
       return path
@@ -68,21 +78,21 @@ local defaults = {
       end,
     },
   },
-  backend = {
-    default = "clipboard",
-    tmux = { width = "90%", height = "90%", close = "C-." },
+  view = { width = 0.9, height = 0.9, border = "rounded" },
+  keymaps = {
+    close = { "<C-.>" },
+  },
+  actions = {
+    close = function()
+      vim.api.nvim_win_close(0, true)
+    end,
   },
 }
 local options = vim.deepcopy(defaults)
-M.tmux_close_arg = options.backend.tmux.close
 
 ---@type fun(value: any): boolean
 local function dimension(value)
-  if type(value) ~= "string" then
-    return false
-  end
-  local number = tonumber(value:match("^(%d+)%%?$"))
-  return number ~= nil and number > 0 and number < math.huge
+  return type(value) == "number" and value > 0 and value < math.huge and (value <= 1 or value % 1 == 0)
 end
 
 function M.setup(opts)
@@ -95,6 +105,34 @@ function M.setup(opts)
     end
   end
   local candidate = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
+  if type(candidate.keymaps) ~= "table" or type(candidate.actions) ~= "table" then
+    return false, "pigeon: keymaps and actions must be tables"
+  end
+  -- Deep merge extends arrays; key sets instead replace their defaults.
+  for action, keys in pairs(opts and opts.keymaps or {}) do
+    candidate.keymaps[action] = vim.deepcopy(keys)
+  end
+  for action, keys in pairs(candidate.keymaps) do
+    if type(action) ~= "string" or type(keys) ~= "table" or not vim.islist(keys) then
+      return false, "pigeon: keymaps must map actions to lists of keys"
+    end
+    for _, key in ipairs(keys) do
+      if type(key) ~= "string" or key == "" or key:find("[%z\r\n]") then
+        return false, "pigeon: keymaps." .. action .. " must contain nonempty Neovim keys"
+      end
+    end
+    if type(candidate.actions[action]) ~= "function" then
+      return false, "pigeon: no handler for " .. action
+    end
+  end
+  for action, handler in pairs(candidate.actions) do
+    if type(action) ~= "string" or type(handler) ~= "function" then
+      return false, "pigeon: actions must map names to functions"
+    end
+  end
+  if candidate.backend ~= "tmux" then
+    return false, "pigeon: backend must be 'tmux'"
+  end
   if type(candidate.format) ~= "function" then
     return false, "pigeon: format must be a function"
   end
@@ -125,33 +163,21 @@ function M.setup(opts)
       return false, "pigeon: tools." .. name .. ".format must be a function when provided"
     end
   end
-  if type(candidate.backend) ~= "table" then
-    return false, "pigeon: backend must be a table"
+  if type(candidate.view) ~= "table" then
+    return false, "pigeon: view must be a table"
   end
-  for key in pairs(candidate.backend) do
-    if defaults.backend[key] == nil then
-      return false, "pigeon: unknown option backend." .. tostring(key)
+  for key in pairs(candidate.view) do
+    if defaults.view[key] == nil then
+      return false, "pigeon: unknown option view." .. tostring(key)
     end
   end
-  if candidate.backend.default ~= "clipboard" and candidate.backend.default ~= "tmux" then
-    return false, "pigeon: backend.default must be 'clipboard' or 'tmux'"
+  local view = candidate.view
+  if not dimension(view.width) or not dimension(view.height) then
+    return false, "pigeon: view width/height must be fractions in (0, 1] or integer cells > 1"
   end
-  local tmux = candidate.backend.tmux
-  if type(tmux) ~= "table" then
-    return false, "pigeon: backend.tmux must be a table"
+  if not vim.tbl_contains({ "none", "single", "double", "rounded", "solid", "shadow" }, view.border) then
+    return false, "pigeon: view.border must be a supported Neovim border name"
   end
-  for key in pairs(tmux) do
-    if defaults.backend.tmux[key] == nil then
-      return false, "pigeon: unknown option backend.tmux." .. tostring(key)
-    end
-  end
-  if not dimension(tmux.width) or not dimension(tmux.height) then
-    return false, "pigeon: backend.tmux width/height must be positive integer strings, optionally followed by %"
-  end
-  if type(tmux.close) ~= "string" or tmux.close == "" or tmux.close:find("[%z\r\n]") then
-    return false, "pigeon: backend.tmux.close must be a nonempty tmux key"
-  end
-  M.tmux_close_arg = (tmux.close:gsub(";$", "\\;"))
   options = candidate
   return true, nil
 end

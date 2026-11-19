@@ -1,4 +1,4 @@
---- Weaver captures editor input and composes Messages, without choosing a receiver.
+--- Weaver captures editor input and composes Messages, without choosing a target.
 --- These internal collectors serve the public delivery table in aviary/init.lua.
 --- Collectors pass complete Messages to on_message; cancellation is quiet.
 --- Callbacks may run immediately or later; startup and callback errors propagate.

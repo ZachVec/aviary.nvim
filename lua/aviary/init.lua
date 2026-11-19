@@ -5,7 +5,7 @@
 --- Delivery failures follow pigeon.send's notification contract.
 ---@class aviary.Weaver
 ---@field setup fun(opts?: aviary.weaver.ConfigOverrides): boolean, string? rebuild from defaults and opts; invalid configuration preserves previous options
----@field prompt fun() choose a prompt and deliver it through Pigeon's current/default target
+---@field prompt fun() choose a prompt and deliver it through Pigeon's attached target; attach before sending
 ---@field files fun() choose files and deliver their references after picker cleanup
 ---@field buffers fun() choose buffers and deliver their file references after picker cleanup
 ---@field text fun() capture the active Visual lines or cursor line and deliver the Message immediately

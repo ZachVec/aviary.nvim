@@ -1,53 +1,97 @@
 # Pigeon decisions
 
-Interface contracts belong to the [Pigeon entry](../../lua/aviary/pigeon/init.lua)
+Caller contracts belong to the [Pigeon entry](../../lua/aviary/pigeon/init.lua)
 and [backend entry](../../lua/aviary/pigeon/backends/init.lua).
-See the [architecture](./architecture.md) for collaboration and resource lifetimes.
+See [architecture](./architecture.md) for collaboration and resource lifetimes.
 
-## Receivers and views share the host server
+## Host server, one Agent per session
 
-Tool input should inherit the user's tmux settings, so receivers and views share
-Neovim's host server. This avoids option snapshots, synchronization and a private
-server with different extended-key behavior. User hooks and shared server options
-are deliberately allowed to affect receivers.
+Agents use Neovim's host tmux server to inherit user configuration without
+option snapshots or synchronization. Each Agent owns one persistent session and
+one window so Agent exit naturally ends its clients and closes their Terminals;
+putting several Agents in one shared window collection would keep those clients
+alive when one Agent exits. Agent sessions set `destroy-unattached=off`,
+`detach-on-destroy=on`, `status=off`, `prefix=None` and `prefix2=None`; windows
+set `remain-on-exit=off` and `pane-border-status=off`.
 
-## Native receiver identity and discovery
+## Default tmux socket
 
-Receiver identity must survive rediscovery and window renames, so use a timestamp
-session name for identity and @pigeon_tool for ownership/tool selection. This
-avoids stale Targets aliasing reused pane IDs and removes window-name stability
-from discovery. Read launch cwd from pane_start_path so another editor can recover
-reference context without Lua state even after the agent changes directory.
+Pigeon starts attach clients with `TMUX` cleared and no `-S` or `-L`, so they use
+tmux's default socket. Operations already inherit Neovim's host server; relying
+on the default socket avoids parsing `TMUX`, while custom-socket servers are
+unsupported.
 
-## Current is a selected reference
+## One Terminal, direct client switching
 
-A receiver can exit between a check and its use, so current remains a destination
-reference and normal operation failure ends the request. Liveness watchers and
-preflights cannot guarantee delivery; automatic retries could replay content the
-user did not ask to resend.
+Each Neovim owns one Terminal and one client. Changing Agents moves that client
+with `switch-client` to the new Agent session, reusing the Neovim buffer, attach
+job and PTY. A temporary per-editor View session is unnecessary because every
+Agent session has one window; the temporary session would add creation,
+discovery, grouping and cleanup work and would still need the client identity for
+cross-session switching.
 
-## Views are disposable resources
+The client's tmux identity is its `client_name`, which is the PTY path returned
+by `nvim_get_chan_info(job).pty`; tmux exposes no separate numeric client id.
+The PTY is unique per attach job, while an Agent session may have several clients
+from different editors. Attach and retarget use `-t =<session>` exact matching so
+a stale Agent fails instead of resolving to a prefix-named session.
 
-Editors can share a tmux window and users can close floats manually, so CLI
-rediscovers views by their source mark on each show. New and reused views share
-one configuration/rollback scope, leaving the receiver and draft available if a
-view fails. Cached pane IDs or a separate rollback policy for reused views would
-add stale state or preserve partially configured displays.
+## Terminal Agent is the delivery source
 
-## Evaluate before delivery
+A send uses the Terminal's stored Agent; it does not query tmux selection first.
+One Agent session has one window, and Pigeon changes the client only after a
+successful retarget, so this field is authoritative in supported flows. Manually
+moving the client outside Pigeon is unsupported. Disabling the Agent session's
+prefix and status line keeps normal terminal input from moving the client by
+accident. A cached Agent avoids a query before every send and makes hidden sends
+independent of focus.
 
-Reference spelling needs the selected destination's cwd and formatter, so Messages
-retain captured values until Target evaluation. Complete evaluation precedes all
-writing, preventing a failed node from delivering part of a composite Message.
+## Terminal float fixes its buffer
 
-## Tmux resolves dimensions
+The Terminal float sets `winfixbuf` so it always displays the Terminal buffer.
+This enforces Pigeon's one-window mapping and lets `TermClose` close the window
+by deleting the buffer rather than calling a window API; switching the float to
+another buffer is unsupported. A forced command can still bypass the option.
 
-Store width and height as native tmux dimension strings and resolve geometry on
-each show. Computing cell counts in Lua would couple configuration to captured
-window geometry and duplicate tmux's layout policy.
+## TermClose lifecycle, synchronous cleanup
 
-## A dedicated shared receiver key table
+A buffer-local `TermClose` listener owns normal cleanup. Neovim reports
+`status == -1` when the terminal is closing because its buffer is being deleted
+by `close_buffer()`; the callback then clears Pigeon state and leaves the window
+and buffer to the external deletion. For normal exits and `jobstop`, the buffer
+still exists, so the callback deletes it and releases the listener group
+synchronously. The fixed float closes with its buffer, so cleanup needs no
+separate window close and must not rely on `WinClosed`.
 
-Hosted receivers need a close binding without rewriting the user's root/global
-maps. Use one shared aviary-pigeon key table, accepting the latest show's close
-key across receivers instead of maintaining per-receiver binding state.
+`TermClose` is registered after all fallible acquisition, and the callback
+clears shared state before using captured resources. A newer Terminal therefore
+cannot be cleared by an older callback; an instance-ownership check would only
+hide a broken invariant. Deferred cleanup with `vim.schedule` would reintroduce
+that race and a queue window, so cleanup stays synchronous.
+
+## Terminal creation does not require a window
+
+`Terminal.create` starts the attach job in its hidden buffer with
+`nvim_buf_call`; the float is acquired only when shown. This lets creation
+succeed and remain usable for sends or a later show if window acquisition fails,
+and removes the ordering requirement between the job and the window. The cost is
+that the PTY initially has the temporary autocmd window's size, then resizes
+when the float opens; a tmux client can observe that initial size before the
+final one. Opening the window first would avoid the transient size but couple
+Terminal creation to display.
+
+## Geometry is applied only when a window is created
+
+Hiding the Terminal closes only the float; showing the hidden Terminal creates a
+new float with the current geometry and resizes the PTY. Focusing an already
+visible float does not change its geometry, and Pigeon does not listen to
+`VimResized`. This keeps Pigeon from continuously driving layout and tmux size
+while the editor is resized; the cost is that a visible Terminal keeps its older
+size until hidden and reopened.
+
+## Leave modified Enter to Neovim and user configuration
+
+Neovim's terminal input may encode modified Enter differently from the outer
+terminal, even with tmux extended keys enabled. Follow normal terminal handling
+without built-in forwarding corrections; users can configure their own Terminal
+mappings without Pigeon imposing an agent-specific key policy.
