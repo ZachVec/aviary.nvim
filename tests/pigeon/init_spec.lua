@@ -116,13 +116,13 @@ describe("aviary.pigeon Terminal routing", function()
     Pigeon.show()
   end)
 
-  it("installs configured action keymaps and fixes the Terminal buffer in its window", function()
-    local inspected = false
+  it("installs configured action keymaps with the Terminal and fixes the buffer in its window", function()
+    local inspected
     assert.is_true(Pigeon.setup({
       keymaps = { close = {}, inspect = { "<F2>" } },
       actions = {
-        inspect = function()
-          inspected = true
+        inspect = function(terminal)
+          inspected = terminal
         end,
       },
     }))
@@ -137,7 +137,8 @@ describe("aviary.pigeon Terminal routing", function()
     assert.are.equal(1, mapping.buffer)
     assert.are.equal(1, mapping.silent)
     mapping.callback()
-    assert.is_true(inspected)
+    assert.are.equal(before.buffer, inspected.buffer)
+    assert.are.equal(before.job, inspected.job)
   end)
 
   it("sends through the current Agent without focusing or switching windows", function()

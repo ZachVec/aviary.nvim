@@ -89,9 +89,9 @@ visible float does not change its geometry, and Pigeon does not listen to
 while the editor is resized; the cost is that a visible Terminal keeps its older
 size until hidden and reopened.
 
-## Leave modified Enter to Neovim and user configuration
+## Leave modified Enter to user configuration
 
 Neovim's terminal input may encode modified Enter differently from the outer
-terminal, even with tmux extended keys enabled. Follow normal terminal handling
-without built-in forwarding corrections; users can configure their own Terminal
-mappings without Pigeon imposing an agent-specific key policy.
+terminal, even with tmux extended keys enabled. Pigeon installs no built-in
+forwarding mappings, but action handlers receive the Terminal so users can bind
+a custom action and send the sequence their environment requires.

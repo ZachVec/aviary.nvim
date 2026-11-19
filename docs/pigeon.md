@@ -68,7 +68,7 @@ require("aviary").setup({
 `keymaps` maps action names to lists of Neovim keys. Each list replaces its
 defaults, and `{}` disables that action's keys. `actions` maps action names to
 handlers and merges over built-ins; the built-in `close` closes the current
-window. Handlers take no arguments, and every mapped custom action needs one.
+window. Handlers receive the Terminal, and every mapped custom action needs one.
 Keymaps and actions are
 resolved when the Terminal is created, installed buffer-locally in Normal and
 Terminal modes, and later setup changes apply to new Terminals.
@@ -91,10 +91,26 @@ remove the pane border. No global tmux key tables, hooks or key bindings are
 installed.
 
 Keyboard input passes through Neovim's terminal handling before reaching the
-nested tmux client. Pigeon adds no Shift/Alt+Enter correction mappings; these keys
-follow Neovim and your own configuration. The Terminal buffer filetype is
-`aviary-pigeon` for user customization. Outer tmux bindings may consume keys
-before Neovim sees them.
+nested tmux client. Pigeon installs no modified-Enter mappings by default; these
+keys follow Neovim and your own configuration. A custom action receives the
+Terminal and can forward the CSI-u sequence when your outer terminal reports
+Shift+Enter distinctly:
+
+```lua
+require("aviary").setup({
+  pigeon = {
+    keymaps = { shift_enter = { "<S-CR>" } },
+    actions = {
+      shift_enter = function(terminal)
+        vim.api.nvim_chan_send(terminal.job, "\27[13;2u")
+      end,
+    },
+  },
+})
+```
+
+The Terminal buffer filetype is `aviary-pigeon` for user customization. Outer
+tmux bindings may consume keys before Neovim sees them.
 
 ## Tools and formatting
 

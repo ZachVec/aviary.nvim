@@ -10,7 +10,7 @@
 ---@field command string[] nonempty argv, passed directly to the backend at creation
 ---@field format? aviary.shared.message.Format local override; nil uses Config.format at each send
 
----@alias aviary.pigeon.Actions table<string, fun()> action name to handler
+---@alias aviary.pigeon.Actions table<string, fun(terminal: aviary.pigeon.Terminal)> action name to handler
 ---@alias aviary.pigeon.Keymaps table<string, string[]> action name to complete key set; empty disables
 
 ---@class aviary.pigeon.ViewConfig
@@ -23,7 +23,7 @@
 ---@field format aviary.shared.message.Format default for tools without an override
 ---@field tools table<string, aviary.pigeon.Tool>
 ---@field keymaps aviary.pigeon.Keymaps mappings installed in the Terminal buffer
----@field actions aviary.pigeon.Actions handlers called by those mappings
+---@field actions aviary.pigeon.Actions handlers called with the Terminal by those mappings
 ---@field view aviary.pigeon.ViewConfig
 
 ---@class aviary.pigeon.ConfigOverrides

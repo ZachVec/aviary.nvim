@@ -135,23 +135,25 @@ function Terminal.create(agent)
     vim.bo[buffer].bufhidden = "hide"
     vim.bo[buffer].swapfile = false
     vim.bo[buffer].filetype = "aviary-pigeon"
-    local cfg = Config()
-    for action, keys in pairs(cfg.keymaps) do
-      local handler = cfg.actions[action]
-      for _, lhs in ipairs(keys) do
-        vim.keymap.set({ "n", "t" }, lhs, handler, {
-          buffer = buffer,
-          silent = true,
-          desc = "Pigeon " .. action,
-        })
-      end
-    end
     local job = vim.api.nvim_buf_call(buffer, function()
       return vim.fn.jobstart(agent:attach(), { term = true })
     end)
     assert(job > 0, "failed to start attach job")
     local client = assert(vim.api.nvim_get_chan_info(job).pty, "attach job has no client pty")
     local terminal = setmetatable({ buffer = buffer, job = job, client = client, agent = agent }, Terminal)
+    local cfg = Config()
+    for action, keys in pairs(cfg.keymaps) do
+      local handler = cfg.actions[action]
+      for _, lhs in ipairs(keys) do
+        vim.keymap.set({ "n", "t" }, lhs, function()
+          handler(terminal)
+        end, {
+          buffer = buffer,
+          silent = true,
+          desc = "Pigeon " .. action,
+        })
+      end
+    end
     vim.api.nvim_create_autocmd("TermClose", {
       buffer = buffer,
       once = true,

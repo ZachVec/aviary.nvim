@@ -126,7 +126,7 @@ require("aviary").setup({
       },
     },
     keymaps = { close = { "<C-.>" } },
-    actions = {}, -- the built-in close closes the current window
+    actions = {}, -- handlers receive the Terminal; close is built in
     view = { width = 0.9, height = 0.9, border = "rounded" },
   },
 })
