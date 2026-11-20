@@ -111,7 +111,10 @@ function M.request(encoded)
     end
     return result
   elseif action == "create" then
-    assert(Pigeon.setup({ tools = { [request.tool] = { command = request.argv } } }))
+    assert(Pigeon.setup({
+      tools = { [request.tool] = { command = request.argv } },
+      keymaps = { pick = { "<F5>" } },
+    }))
     for _, choice in ipairs(Backend.list()) do
       if choice:id() == request.tool and not choice.session then
         local agent = choice:resolve()
@@ -136,7 +139,19 @@ function M.request(encoded)
       end
       error("missing Agent")
     end
-    local ok, err = pcall(Pigeon.pick)
+    local ok, err = pcall(function()
+      local buffer = terminal_buffers()[1]
+      if not buffer then
+        Pigeon.show()
+        return
+      end
+      local Config = require("aviary.pigeon.config")
+      vim.api.nvim_buf_call(buffer, function()
+        Config().actions.pick(function()
+          return current_agent()
+        end, { path = "" })
+      end)
+    end)
     vim.ui.select = saved
     assert(ok, err)
   elseif action == "show" then
@@ -159,9 +174,6 @@ function M.request(encoded)
     agent:send(agent:eval({ path = request.path, start_row = request.first, end_row = request.last }))
     assert(#M.notes == 0, table.concat(M.notes, "\n"))
     return snapshot().session
-  elseif action == "pick" then
-    Pigeon.pick()
-    return true
   elseif action ~= "snapshot" then
     error("unknown action: " .. action)
   end

@@ -17,6 +17,7 @@ describe("aviary.pigeon.config", function()
     assert.are.same({ close = { "<C-.>" } }, Config().keymaps)
     assert.is_function(Config().actions.close)
     assert.is_function(Config().actions.prompt)
+    assert.is_function(Config().actions.pick)
     assert.are.same({ ["{file}"] = "{file} ", ["{line}"] = "{line} " }, Config().prompts)
     assert.is_function(Config().resolvers.file)
     assert.is_function(Config().resolvers.line)
@@ -56,6 +57,7 @@ describe("aviary.pigeon.config", function()
     assert.is_nil(Config().keymaps.prompt)
     assert.is_function(Config().actions.close)
     assert.is_function(Config().actions.prompt)
+    assert.is_function(Config().actions.pick)
     assert.is_nil(Config().prompts.review)
     assert.is_nil(Config().resolvers.custom)
   end)
@@ -73,7 +75,8 @@ describe("aviary.pigeon.config", function()
   end)
 
   it("accepts built-in actions in keymaps and rejects actions without handlers", function()
-    assert.is_true(Config.setup({ keymaps = { prompt = { "<C-p>" } } }))
+    assert.is_true(Config.setup({ keymaps = { prompt = { "<C-p>" }, pick = { "<F5>" } } }))
+    assert.are.same({ "<F5>" }, Config().keymaps.pick)
     local ok, reason = Config.setup({ keymaps = { files = { "<C-f>" } } })
     assert.is_false(ok)
     assert.are.equal("pigeon: no handler for files", reason)
@@ -124,6 +127,7 @@ describe("aviary.pigeon.config", function()
         { actions = false },
         { actions = { close = true } },
         { actions = { prompt = false } },
+        { actions = { pick = false } },
         { prompts = false },
         { prompts = { bad = 42 } },
         { resolvers = false },

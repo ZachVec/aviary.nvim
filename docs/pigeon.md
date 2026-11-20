@@ -7,20 +7,18 @@ references or prompts to the current Agent. See
 
 ## Usage
 
-<!-- vimdoc: pigeon.nvim-api pigeon.pick() pigeon.show() pigeon.status() -->
+<!-- vimdoc: pigeon.nvim-api pigeon.show() -->
 
 ```lua
 local aviary = require("aviary")
 local pigeon = aviary.pigeon
-pigeon.pick()   -- choose an existing Agent or create another instance
-pigeon.show()   -- reopen/focus this Neovim's Terminal; pick when no Agent is attached
-pigeon.status() -- report the Terminal's current Agent
+pigeon.show() -- show/create this Neovim's Terminal; choose an Agent when none is attached
 ```
 
-`show()` and `pick()` capture the current editor reference before changing
-focus. Actions run from the Terminal and receive that reference. There is no
-public send function: compose and deliver content inside an
-[action](#actions). Actions return nothing. Failures notify once; picker
+`show()` captures the current editor reference before changing focus. Actions
+run from the Terminal and receive a lazy current-Agent getter and that
+reference. There is no public send function: compose and deliver content inside
+an [action](#actions). Actions return nothing. Failures notify once; picker
 cancellation is quiet and preserves the current Agent. Requests are never
 automatically replayed. Empty text does nothing.
 
@@ -32,21 +30,28 @@ remain alive while hidden.
 
 `keymaps` maps action names to lists of Neovim keys. Each list replaces its
 defaults, and `{}` disables that action's keys. `actions` maps action names to
-handlers and merges over built-ins. Handlers receive the current Agent and the
-captured reference:
+handlers and merges over built-ins. Handlers receive a getter for the current
+Agent and the captured reference:
 
 ```lua
----@param agent aviary.pigeon.Agent
+---@param current fun(): aviary.pigeon.Agent
 ---@param reference aviary.pigeon.Reference
 ```
+
+`current()` resolves the Agent displayed by the Terminal's tmux client and
+raises when that client is not attached to a Pigeon Agent. It is not memoized:
+call it once and cache the result when a handler needs the Agent more than once.
+`close` and actions that do not use the Agent never call it, so they perform no
+tmux lookup.
 
 Keymaps and actions are resolved when the Terminal is created, installed
 buffer-locally in Normal and Terminal modes, and later setup changes apply to new
 Terminals. Every mapped action needs a handler; built-ins are available by name.
 
-Built-ins are `close` and `prompt`. `close` closes the current window. `prompt`
-selects a named template and sends it; it has no default keys. Send actions have
-no default keys so they cannot conflict with an Agent's own input; configure the
+Built-ins are `close`, `prompt` and `pick`. `close` closes the current window.
+`prompt` selects a named template and sends it. `pick` switches the Terminal's
+Agent and marks the current Agent in its selector. `prompt` and `pick` have no
+default keys so they cannot conflict with an Agent's own input; configure the
 ones you want:
 
 ```lua
@@ -55,6 +60,7 @@ require("aviary").setup({
     keymaps = {
       close = { "<C-.>" },
       prompt = { "<C-p>" },
+      pick = { "<F5>" },
     },
   },
 })
@@ -107,7 +113,8 @@ require("aviary").setup({
   pigeon = {
     keymaps = { files = { "<C-f>" } },
     actions = {
-      files = function(agent)
+      files = function(current)
+        local agent = current()
         local picker = require("snacks").picker
         picker.pick("files", {
           confirm = function(selected)
@@ -137,25 +144,25 @@ it closes.
 
 ## References
 
-`show()` and `pick()` capture a reference before focusing the Terminal. In
-Visual mode the reference contains the inclusive whole-line range and Pigeon
-exits Visual; otherwise it contains the cursor row with `end_row` omitted. The
-path is snapshotted at capture time, so later renames or edits do not change an
-already captured reference; show the Terminal again to refresh it. Capturing
-does not open or validate the file.
+`show()` captures a reference before focusing the Terminal. In Visual mode the
+reference contains the inclusive whole-line range and Pigeon exits Visual;
+otherwise it contains the cursor row with `end_row` omitted. The path is
+snapshotted at capture time, so later renames or edits do not change an already
+captured reference; show the Terminal again to refresh it. Capturing does not
+open or validate the file.
 
 Invocations from the Terminal itself do not replace the reference. Actions run
 from the Terminal therefore always see the last reference captured from an
-editor window. The reference is plain data, not a buffer handle: closing the
-source window does not invalidate it.
+editor window; the `pick` action likewise preserves it. The reference is plain
+data, not a buffer handle: closing the source window does not invalidate it.
 
 Action handlers may construct whole-file references and references to other
 paths. `Agent:eval` only renders them; it does not read or modify the source.
 
 ## Prompts
 
-The built-in `prompt` action uses the captured reference and a named template.
-Bind it in the Terminal:
+The built-in `prompt` action resolves the current Agent once, then uses the
+captured reference and a named template. Bind it in the Terminal:
 
 ```lua
 require("aviary").setup({
@@ -213,14 +220,15 @@ action runs.
 
 ## Agents and display
 
-There is one Terminal per Neovim, and it has one current Agent. `pick()` lists
-existing Agents and creation choices in `vim.ui.select`; a single candidate is
-still passed to the configured picker. Entries begin with ` <tool>` to create
-an instance or ` <tool> <launch cwd> [<session>]` to reuse an Agent. The
-current Agent appears first with `[current]`. Discovery includes only Pigeon
-Agents on Neovim's host tmux server whose tool names exist in local
-configuration. Renaming a tmux window does not change an Agent's identity or
-formatter.
+There is one Terminal per Neovim, and it has one current Agent. `show()` lists
+existing Agents and creation choices in `vim.ui.select` when no Terminal exists;
+the built-in `pick` action lists them when a Terminal is attached. A single
+candidate is still passed to the configured picker. Entries begin with
+` <tool>` to create an instance or ` <tool> <launch cwd> [<session>]` to reuse
+an Agent. The pick action places the current Agent first with `[current]`.
+Discovery includes only Pigeon Agents on Neovim's host tmux server whose tool
+names exist in local configuration. Renaming a tmux window does not change an
+Agent's identity or formatter.
 
 Each Agent has its own persistent tmux session with one agent window. This
 Neovim's client attaches directly to that session; no temporary View session is
@@ -315,10 +323,12 @@ inside the launch cwd are relative; others stay absolute. A tool's `format`
 overrides `pigeon.format`. Codex uses the default `file :L12-15`; Claude uses
 `@file#L12-15`, quoting unusual paths.
 
-Pigeon changes the current Agent only after `pick()` or `show()` successfully
-selects or creates one. Moving this editor's tmux client outside Pigeon is not a
-supported way to change Agents; the Agent session disables its prefix and status
-line so normal key input cannot move the client by accident.
+Pigeon changes the Agent displayed by this editor's tmux client only through
+`show()` creation or the `pick` action. Actions resolve the current Agent from
+that client, so an external move to another Pigeon Agent is followed on the next
+action; moving the client to a non-Pigeon session makes actions that resolve the
+Agent fail with a warning. The Agent session disables its prefix and status line
+so normal key input cannot move the client by accident.
 
 `format(path, start_row?, end_row?)` receives raw 1-based inclusive rows; nil
 start means the whole file. It must return a nonempty string. Updating local
@@ -340,12 +350,14 @@ resources or checking executable availability. Unknown fields are rejected;
 on failure. See [setup scope](../README.md#installation).
 
 Weaver, its text action, the shared Message tree and the built-in picker
-configuration are removed. Use Pigeon actions instead: `prompt` is built in, and
-files/buffers are user actions for your picker. Raw text can be pasted with your
-editor or agent, or sent from a custom action with `agent:send`. There is no
-public `pigeon.send`; compose content in actions. References are plain
-`{ path, start_row?, end_row? }` tables rendered with `agent:eval`. Clipboard
-support and the old nested `pigeon.backend` configuration remain removed; only
-the `tmux` backend is available. Sessions created by the previous receiver/View
-model are not migrated into the new discovery format; create fresh Agents
-through `pick()`.
+configuration are removed. Use Pigeon actions instead: `prompt` and `pick` are
+built in, and files/buffers are user actions for your picker. Action handlers
+receive a `current` getter; resolve the Agent once, then use `agent:eval` and
+`agent:send`. Raw text can be pasted with your editor or agent, or sent from a
+custom action. There is no public `pigeon.send`, `pigeon.pick` or
+`pigeon.status`; compose content in actions and switch Agents with the `pick`
+action. References are plain `{ path, start_row?, end_row? }` tables rendered
+with `agent:eval`. Clipboard support and the old nested `pigeon.backend`
+configuration remain removed; only the `tmux` backend is available. Sessions
+created by the previous receiver/View model are not migrated into the new
+discovery format; create fresh Agents through `show()` or the `pick` action.

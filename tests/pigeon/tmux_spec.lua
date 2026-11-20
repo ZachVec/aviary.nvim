@@ -153,6 +153,44 @@ describe("pigeon tmux backend", function()
     assert(ok, err)
   end)
 
+  it("resolves the Agent displayed by an attached client", function()
+    local agent = create()
+    local buffer = vim.api.nvim_create_buf(false, true)
+    vim.bo[buffer].bufhidden = "hide"
+    local job = vim.api.nvim_buf_call(buffer, function()
+      return vim.fn.jobstart(
+        { "env", "-u", "TMUX", "tmux", "attach-session", "-t", "=" .. agent.session },
+        { term = true }
+      )
+    end)
+    assert(job > 0)
+    local client = assert(vim.api.nvim_get_chan_info(job).pty)
+    assert(
+      vim.wait(2000, function()
+        local ok, record = pcall(Cli.current, client)
+        return ok and record.session == agent.session
+      end),
+      "attached client was not discovered"
+    )
+    local record = Cli.current(client)
+    assert.are.equal(agent.session, record.session)
+    assert.are.equal(agent.pane, record.pane)
+    assert.are.equal("test", record.tool)
+    assert.are.equal(agent.cwd, record.cwd)
+
+    query("new-session", "-d", "-s", "other", "sleep", "300")
+    Cli.retarget(client, "other")
+    assert.has_error(function()
+      Cli.current(client)
+    end, "current tmux window is not a Pigeon Agent")
+    assert.has_error(function()
+      Cli.current("/dev/pts/nonexistent")
+    end, "terminal client is not attached to a Pigeon Agent")
+
+    vim.fn.jobstop(job)
+    vim.api.nvim_buf_delete(buffer, { force = true })
+  end)
+
   it("renders references with current local formats and rejects invalid output", function()
     local agent = create()
     assert(Config.setup({

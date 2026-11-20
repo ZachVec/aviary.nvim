@@ -25,6 +25,7 @@ ToolChoice.__index = ToolChoice
 
 ---@class aviary.pigeon.backends.tmux: aviary.pigeon.Backend
 ---@field list fun(): table<integer, aviary.pigeon.tmux.Agent|aviary.pigeon.tmux.ToolChoice> configured Agents, then sorted creation choices
+---@field current fun(client: string): aviary.pigeon.tmux.Agent Agent displayed by client; raises when the client is not attached to a Pigeon Agent
 local M = {}
 
 function Agent:id()
@@ -74,6 +75,10 @@ end
 function ToolChoice:resolve()
   local tool = assert(Config().tools[self.tool], "missing local tool definition: " .. self.tool)
   return setmetatable(Cli.create(self.tool, tool.command, vim.fs.normalize(vim.fn.getcwd())), Agent) --[[@as aviary.pigeon.tmux.Agent]]
+end
+
+function M.current(client)
+  return setmetatable(Cli.current(client), Agent) --[[@as aviary.pigeon.tmux.Agent]]
 end
 
 function M.list()

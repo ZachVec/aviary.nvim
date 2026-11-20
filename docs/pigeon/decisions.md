@@ -7,28 +7,40 @@ See [architecture](./architecture.md) for collaboration and resource lifetimes.
 
 ## Actions own send workflows
 
-Pigeon exposes no public send function. Action handlers receive the current
-Agent and the captured reference, and call `agent:send`/`agent:eval` themselves.
-Files/buffers actions are user configuration rather than built-ins so Pigeon
-carries no picker interface or optional picker dependency; the cost is that users
-write the picker integration and own its asynchronous cleanup.
+Pigeon exposes no public send function. Action handlers receive a lazy
+current-Agent getter and the captured reference; they resolve the Agent once when
+needed and call `agent:send`/`agent:eval` themselves. Files/buffers actions are
+user configuration rather than built-ins so Pigeon carries no picker interface or
+optional picker dependency; the cost is that users write the picker integration
+and own its asynchronous cleanup.
 
-## Actions receive the Agent, not the Terminal
+## Actions receive a lazy current-Agent getter
 
 Rendering and delivery are Agent operations; the Terminal is the editor
-buffer/window frame that owns the keymaps. Passing the Agent keeps buffer, job
-and client details out of every handler, while a Terminal-buffer keymap can still
-read buffer-local terminal state such as `b:terminal_job_id` for input
-forwarding. The cost is that actions cannot reach the Terminal object directly
-and must use the keymap's buffer for terminal-level customization.
+buffer/window frame that owns the keymaps. Handlers receive a getter rather than
+the Agent so actions that do not need it, such as `close` and input forwarding,
+perform no tmux query and cannot fail on resolution. The getter raises when the
+client is not attached to a Pigeon Agent and is not memoized; resolving it is
+the consumer's responsibility, and callers cache it when they need one Agent for
+several uses. Actions still cannot reach the Terminal object directly; a Terminal-buffer
+keymap can read buffer-local terminal state such as `b:terminal_job_id`, which
+the built-in pick action uses.
 
-## Reference capture belongs to show and pick
+## show is the only creation entry
 
-`show()` and `pick()` snapshot the current file, cursor row or Visual whole-line
-range before changing focus. The reference is plain data stored with a
-snapshotted path, so no buffer handle has to be cleaned up or validated; the
-cost is that a reference can become stale and must be refreshed by showing the
-Terminal again.
+`show()` creates a Terminal when none exists and opens the chooser; switching
+Agents is a Terminal-buffer action, so a terminal-local keymap is the only
+switching entry. Keeping creation in one place lets the action assume a client
+and avoids a public create/select API, at the cost of requiring users to bind
+`keymaps.pick` before the Terminal is created.
+
+## Reference capture belongs to show
+
+`show()` snapshots the current file, cursor row or Visual whole-line range before
+changing focus. The reference is plain data stored with a snapshotted path, so no
+buffer handle has to be cleaned up or validated; the cost is that a reference can
+become stale and must be refreshed by showing the Terminal again. The pick action
+runs in the Terminal and preserves the captured reference.
 
 ## Plain references render through the Agent
 
@@ -41,11 +53,12 @@ different join or layout override the action or resolver.
 
 ## Built-in actions and resolvers live in config
 
-`close` and `prompt` handlers, default prompts and built-in `file`/`line`
+`close`, `prompt` and `pick` handlers, default prompts and built-in `file`/`line`
 resolvers live in the config defaults, so user overrides merge naturally and
 keymap validation recognizes built-in action names without a separate registry.
-The trade-off is that the config module contains the prompt workflow rather than
-only data; the alternative was an init-side built-in table duplicating the names.
+The trade-off is that the config module contains the prompt and pick workflows
+rather than only data; the alternative was an init-side built-in table
+duplicating the names.
 
 ## Host server, one Agent per session
 
@@ -79,15 +92,17 @@ The PTY is unique per attach job, while an Agent session may have several client
 from different editors. Attach and retarget use `-t =<session>` exact matching so
 a stale Agent fails instead of resolving to a prefix-named session.
 
-## Terminal Agent is the delivery source
+## Current Agent is derived from the tmux client
 
-Delivery uses the Terminal's stored Agent; it does not query tmux selection
-first. One Agent session has one window, and Pigeon changes the client only after
-a successful retarget, so this field is authoritative in supported flows.
-Manually moving the client outside Pigeon is unsupported. Disabling the Agent
-session's prefix and status line keeps normal terminal input from moving the
-client by accident. A cached Agent avoids a query before every action and makes
-hidden delivery independent of focus.
+Actions resolve the current Agent from the Terminal's tmux client instead of
+storing one. `Backends.current(client)` runs one `list-clients` query and matches
+the exact client PTY, so the client's displayed session is the single source of
+truth; an external move to another Pigeon Agent is followed on the next action,
+and a non-Pigeon target raises. Switching Agents therefore needs no state update:
+the pick action only moves the client. The cost is one tmux query per action that
+uses the Agent, and actions that resolve it depend on the client being attached.
+Disabling the Agent session's prefix and status line keeps normal terminal input
+from moving the client by accident.
 
 ## Terminal float fixes its buffer
 
@@ -116,8 +131,8 @@ that race and a queue window, so cleanup stays synchronous.
 
 `Terminal.create` starts the attach job in its hidden buffer with
 `nvim_buf_call`; the float is acquired only when shown. This lets creation
-succeed and remain usable for actions or a later show if window acquisition
-fails, and removes the ordering requirement between the job and the window. The
+succeed and remain available for a later show if window acquisition fails, and
+removes the ordering requirement between the job and the window. The
 cost is that the PTY initially has the temporary autocmd window's size, then
 resizes when the float opens; a tmux client can observe that initial size before
 the final one. Opening the window first would avoid the transient size but couple

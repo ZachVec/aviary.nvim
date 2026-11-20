@@ -4,7 +4,7 @@
 local Helpers = require("pigeon.helpers")
 
 describe("aviary.pigeon Terminal routing", function()
-  local Pigeon, Backends, choices, choose, options, delivered, notes, fail
+  local Pigeon, Backends, choices, choose, options, delivered, notes, fail, current_agent
   local saved_select, saved_notify
   local first, second
   local original_buf, original_win, extra_bufs, extra_paths
@@ -85,7 +85,7 @@ describe("aviary.pigeon Terminal routing", function()
     extra_bufs, extra_paths = {}, {}
     Helpers.reload_pigeon()
     saved_select, saved_notify = vim.ui.select, vim.notify
-    delivered, notes, fail, choose, options = {}, {}, nil, nil, nil
+    delivered, notes, fail, choose, options, current_agent = {}, {}, nil, nil, nil, nil
     first, second = agent("first"), agent("second")
     choices = { first, second }
     Backends = require("aviary.pigeon.backends")
@@ -94,6 +94,12 @@ describe("aviary.pigeon Terminal routing", function()
         error("discovery failed", 0)
       end
       return vim.list_slice(choices)
+    end
+    Backends.current = function()
+      if fail == "current" then
+        error("current failed", 0)
+      end
+      return assert(current_agent)
     end
     vim.ui.select = function(items, opts, done)
       choices, options, choose = items, opts, done
@@ -132,18 +138,27 @@ describe("aviary.pigeon Terminal routing", function()
     Helpers.reload_pigeon()
   end)
   local function attach()
-    Pigeon.pick()
+    Pigeon.show()
     choose(first)
+    current_agent = first
+  end
+  local function pick_action()
+    local before = assert(terminal_state())
+    vim.api.nvim_buf_call(before.buffer, function()
+      mapping(before.buffer, "<F5>").callback()
+    end)
   end
 
-  it("selects once, reuses one Terminal, and pins the current Agent by id", function()
+  it("switches through the pick action, reuses one Terminal, and pins the current Agent by id", function()
+    assert.is_true(Pigeon.setup({ keymaps = { pick = { "<F5>" } } }))
     attach()
     local before = assert(terminal_state())
     assert.are.equal(1, #terminal_buffers())
-    Pigeon.pick()
+    pick_action()
     assert.are.equal(first, choices[1])
     assert.are.equal("first [current]", options.format_item(first))
     choose(second)
+    current_agent = second
     assert.are.same({ before.client }, second.retargets)
     local after = assert(terminal_state())
     assert.are.equal(before.buffer, after.buffer)
@@ -156,8 +171,8 @@ describe("aviary.pigeon Terminal routing", function()
     assert.is_true(Pigeon.setup({
       keymaps = { close = {}, inspect = { "<F2>" } },
       actions = {
-        inspect = function(target, reference)
-          inspected = { agent = target, reference = reference }
+        inspect = function(current, reference)
+          inspected = { agent = current(), reference = reference }
         end,
       },
     }))
@@ -182,8 +197,8 @@ describe("aviary.pigeon Terminal routing", function()
     Pigeon.setup({
       keymaps = { send = { "<F3>" } },
       actions = {
-        send = function(target)
-          target:send("payload")
+        send = function(current)
+          current():send("payload")
         end,
       },
     })
@@ -262,41 +277,55 @@ describe("aviary.pigeon Terminal routing", function()
 
   it("keeps the existing Agent on cancellation, discovery or retarget failure", function()
     Pigeon.setup({
-      keymaps = { send = { "<F3>" } },
+      keymaps = { pick = { "<F5>" }, send = { "<F3>" } },
       actions = {
-        send = function(target)
-          target:send("still first")
+        send = function(current)
+          current():send("still first")
         end,
       },
     })
     attach()
     local before = assert(terminal_state())
-    Pigeon.pick()
+    pick_action()
     choose(nil)
     fail = "list"
-    Pigeon.pick()
+    pick_action()
     fail = "retarget"
-    Pigeon.pick()
+    pick_action()
     choose(second)
     assert.are.equal(2, #notes)
     fail = nil
     mapping(before.buffer, "<F3>").callback()
     assert.are.same({ { "first", "still first" } }, delivered)
+    assert.are.equal("first", current_agent:id())
     assert.are.equal(before.buffer, terminal_state().buffer)
   end)
 
-  it("prompts for a sole choice and preserves the Terminal across setup/status", function()
+  it("warns once when the pick action cannot resolve the current Agent", function()
+    Pigeon.setup({ keymaps = { pick = { "<F5>" } } })
+    attach()
+    local before = assert(terminal_state())
+    fail = "current"
+    pick_action()
+    fail = nil
+    assert.are.equal(1, #notes)
+    assert.is_truthy(notes[1]:find("current failed", 1, true))
+    assert.are.equal(before.buffer, terminal_state().buffer)
+  end)
+
+  it("prompts for a sole choice and exposes only show and setup", function()
     choices = { first }
     Pigeon.show()
     assert.are.equal(1, #choices)
     assert.is_not_nil(choose)
     choose(first)
     assert.are.equal(1, #terminal_buffers())
-    assert.are.same({ "pick", "setup", "show", "status" }, vim.fn.sort(vim.tbl_keys(Pigeon)))
+    assert.are.same({ "setup", "show" }, vim.fn.sort(vim.tbl_keys(Pigeon)))
     assert.is_nil(Pigeon.send)
+    assert.is_nil(Pigeon.pick)
+    assert.is_nil(Pigeon.status)
     assert.is_true(Pigeon.setup({ view = { width = 80 } }))
-    Pigeon.status()
-    assert.are.same({ "pigeon: agent: first" }, notes)
+    assert.are.same({}, notes)
   end)
 
   it("cleans the Terminal synchronously when the attach job ends", function()
@@ -306,8 +335,6 @@ describe("aviary.pigeon Terminal routing", function()
     assert(vim.wait(2000, function()
       return terminal_state() == nil
     end))
-    Pigeon.status()
-    assert.are.same({ "pigeon: agent: not attached" }, notes)
     Pigeon.show()
     assert.is_not_nil(choose)
     choose(first)
@@ -333,7 +360,7 @@ describe("aviary.pigeon Terminal routing", function()
       return { "/pigeon-test-no-such-executable" }
     end
     choices = { bad }
-    Pigeon.pick()
+    Pigeon.show()
     assert.is_not_nil(choose)
     choose(bad)
     assert.are.equal(1, #notes)

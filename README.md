@@ -33,6 +33,7 @@ Install with lazy.nvim:
       keymaps = {
         close = { "<C-.>" },
         prompt = { "<C-p>" }, -- optional: open the prompt template menu
+        pick = { "<F5>" }, -- optional: switch the Terminal's Agent
       },
     },
   },
@@ -43,16 +44,16 @@ Install with lazy.nvim:
 }
 ```
 
-See the feature manuals above, or `:h hawk.nvim` and `:h pigeon.nvim`. Use
-`pigeon.pick()` to choose an Agent or create a tool instance; `pigeon.show()`
-reopens or focuses this editor's Terminal and picks when no Agent is attached.
-`<C-.>` hides it while the Agent keeps running. `show()` and `pick()` capture the
-current file and cursor line, or the active Visual range, for Terminal actions.
-Each Neovim attaches its own client directly to the chosen Agent session; actions
-deliver through that Terminal's current Agent. Agent exit closes attached
-Terminals naturally. See [agents and display](./docs/pigeon.md#agents-and-display)
-for terminal and tmux behavior. Failed requests warn once and are never
-automatically replayed.
+See the feature manuals above, or `:h hawk.nvim` and `:h pigeon.nvim`.
+`pigeon.show()` reopens or focuses this editor's Terminal and chooses an Agent
+when none is attached. `<C-.>` hides it while the Agent keeps running. The
+built-in `pick` action switches the Terminal's Agent; bind it in
+`pigeon.keymaps`. `show()` captures the current file and cursor line, or the
+active Visual range, for Terminal actions. Each Neovim attaches its own client
+directly to the chosen Agent session; actions deliver through the Agent that
+client displays. Agent exit closes attached Terminals naturally. See
+[agents and display](./docs/pigeon.md#agents-and-display) for terminal and tmux
+behavior. Failed requests warn once and are never automatically replayed.
 
 Root setup accepts public feature names; nested tables belong to their feature.
 Each call rebuilds from feature defaults and the current options. Previously
@@ -64,16 +65,17 @@ acquires no runtime resources.
 
 ## Workflows
 
-[Pigeon actions](./docs/pigeon.md#actions) run from the Terminal and receive the
-current Agent and captured reference. The built-in `prompt` action selects a
-named template and sends it; bind it in `pigeon.keymaps`. [Hawk](./docs/hawk.md)
-opens Git Review:
+[Pigeon actions](./docs/pigeon.md#actions) run from the Terminal and receive a
+lazy current-Agent getter and the captured reference. The built-in `prompt`
+action selects a named template and sends it, and `pick` switches the Agent;
+bind them in `pigeon.keymaps`. [Hawk](./docs/hawk.md) opens Git Review:
 
 ```lua
 local aviary = require("aviary")
 aviary.hawk.show()   -- inspect changed files and two Git versions
 aviary.pigeon.show() -- show/create the Terminal; captures the current reference
--- In the Terminal, press the prompt keymap to send a template about that reference.
+-- In the Terminal, press the prompt keymap to send a template about that reference,
+-- or the pick keymap to switch Agents.
 ```
 
 The reference is the current file and cursor line, or the Visual whole-line range

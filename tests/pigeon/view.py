@@ -1,6 +1,5 @@
 """Real Neovim Terminal/tmux integration. Owns an isolated server and PTYs."""
 import argparse
-from concurrent.futures import ThreadPoolExecutor
 import fcntl
 import json
 import os
@@ -235,13 +234,11 @@ class Experiment:
         self.wait(lambda: self.rpc(a)["mode"] == "t", "show restores terminal mode")
         self.check("hidden send preserves focus, multi-line Unicode, bracketed paste, and no Enter")
 
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            selection = pool.submit(self.rpc, a, "pick")
-            self.wait(lambda: "Pigeon Agent:" in self.tmux("capture-pane", "-p", "-t", a["pane"]), "native picker prompt")
-            self.tmux("send-keys", "-t", a["pane"], "2", "Enter")
-            selection.result(timeout=5)
+        self.tmux("send-keys", "-t", a["pane"], "F5")
+        self.wait(lambda: "Pigeon Agent:" in self.tmux("capture-pane", "-p", "-t", a["pane"]), "native picker prompt")
+        self.tmux("send-keys", "-t", a["pane"], "2", "Enter")
         self.wait(lambda: self.selected(a, first) and self.rpc(a)["mode"] == "t", "native picker returns to terminal mode")
-        self.check("native picker switches Agent and returns to terminal input mode")
+        self.check("pick key opens the native picker, switches Agent, and returns to terminal input mode")
 
         before = len(self.received(first))
         os.write(a["master"], b"KEYBOARD")

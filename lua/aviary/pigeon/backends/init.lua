@@ -20,15 +20,22 @@
 
 ---@class aviary.pigeon.Backend
 ---@field list fun(): aviary.pigeon.Choice[] current inventory, including supported tool creation choices
+---@field current fun(client: string): aviary.pigeon.Agent resolve the Agent displayed by client; raises when the client is not attached to a Pigeon Agent
 
 ---@class aviary.pigeon.Backends
 ---@field list fun(): aviary.pigeon.Choice[] current inventory from the configured backend
+---@field current fun(client: string): aviary.pigeon.Agent resolve the Agent displayed by client from the configured backend
 ---@field checkhealth fun(name: aviary.pigeon.BackendName) run read-only backend diagnostics
 local M = {}
 
 function M.list()
   local name = require("aviary.pigeon.config")().backend
   return require("aviary.pigeon.backends." .. name).list()
+end
+
+function M.current(client)
+  local name = require("aviary.pigeon.config")().backend
+  return require("aviary.pigeon.backends." .. name).current(client)
 end
 
 function M.checkhealth(name)

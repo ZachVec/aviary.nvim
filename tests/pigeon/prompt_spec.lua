@@ -26,14 +26,16 @@ describe("aviary.pigeon prompt action", function()
   end
 
   local function run()
-    Config().actions.prompt(agent, reference)
+    Config().actions.prompt(function()
+      return agent
+    end, reference)
   end
 
   before_each(function()
     Helpers.reload_pigeon()
     Config = require("aviary.pigeon.config")
     Config.setup()
-    delivered, notes = {}, {}
+    delivered, notes, items, options, choose = {}, {}, nil, nil, nil
     reference = { path = "/tmp/proj/a.lua", start_row = 2, end_row = 3 }
     agent = fake_agent()
     saved_select, saved_notify = vim.ui.select, vim.notify
@@ -119,5 +121,26 @@ describe("aviary.pigeon prompt action", function()
     assert.are.same({}, delivered)
     assert.are.equal(1, #notes)
     assert.is_truthy(notes[1]:find("boom", 1, true))
+  end)
+
+  it("resolves the current Agent once before opening the selector", function()
+    local calls = 0
+    Config().actions.prompt(function()
+      calls = calls + 1
+      return agent
+    end, reference)
+    choose("{line}")
+    assert.are.equal(1, calls)
+    assert.are.same({ "</tmp/proj/a.lua:2-3> " }, delivered)
+  end)
+
+  it("reports an Agent resolution failure once without opening the selector", function()
+    Config().actions.prompt(function()
+      error("current failed", 0)
+    end, reference)
+    assert.is_nil(items)
+    assert.are.same({}, delivered)
+    assert.are.equal(1, #notes)
+    assert.is_truthy(notes[1]:find("current failed", 1, true))
   end)
 end)

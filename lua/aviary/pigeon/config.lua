@@ -1,7 +1,8 @@
 --- Pigeon options and built-in actions.
 --- Setup rebuilds from defaults, rejects unknown fields, and preserves current
---- options on failure; it acquires no resources. Actions receive the owning
---- Terminal and the captured reference. Resolvers receive both and return text.
+--- options on failure; it acquires no resources. Actions receive a lazy
+--- current-Agent getter and the captured reference. Resolvers receive the
+--- resolved Agent and reference and return text.
 ---
 --- Config() returns borrowed, read-only running options.
 ---@class aviary.pigeon.ConfigModule
@@ -10,7 +11,8 @@
 local M = {}
 
 ---@alias aviary.pigeon.Format fun(path: string, start_row?: integer, end_row?: integer): string?
----@alias aviary.pigeon.Actions table<string, fun(agent: aviary.pigeon.Agent, reference: aviary.pigeon.Reference)>
+---@alias aviary.pigeon.AgentGetter fun(): aviary.pigeon.Agent resolve the current Agent; raises when the client is not attached to a Pigeon Agent
+---@alias aviary.pigeon.Actions table<string, fun(current: aviary.pigeon.AgentGetter, reference: aviary.pigeon.Reference)>
 ---@alias aviary.pigeon.Keymaps table<string, string[]> action name to complete key set; empty disables
 ---@alias aviary.pigeon.Resolver fun(agent: aviary.pigeon.Agent, reference: aviary.pigeon.Reference): string
 
@@ -28,7 +30,7 @@ local M = {}
 ---@field format aviary.pigeon.Format default for tools without an override
 ---@field tools table<string, aviary.pigeon.Tool>
 ---@field keymaps aviary.pigeon.Keymaps mappings installed in the Terminal buffer
----@field actions aviary.pigeon.Actions handlers called with the current Agent and captured reference
+---@field actions aviary.pigeon.Actions handlers called with a lazy current-Agent getter and captured reference
 ---@field prompts table<string, string> named prompt templates (name -> template)
 ---@field resolvers table<string, aviary.pigeon.Resolver> token handlers; resolver text is concatenated verbatim
 ---@field view aviary.pigeon.ViewConfig
@@ -89,35 +91,70 @@ local defaults = {
     close = function()
       vim.api.nvim_win_close(0, true)
     end,
-    prompt = function(agent, reference)
+    prompt = function(current, reference)
       local config = M()
       local names = vim.tbl_keys(config.prompts)
       if #names == 0 then
         require("aviary.shared.notify").warn("pigeon: no prompts are configured")
         return
       end
-      table.sort(names)
-      local prompts, resolvers = config.prompts, config.resolvers
-      vim.ui.select(names, { prompt = "Prompt: " }, function(name)
-        if not name then
-          return
-        end
-        local template = prompts[name]
-        require("aviary.shared.protect")(function()
-          local out = {}
-          local from = 1
-          for at, token, after in template:gmatch("(){([%w_]+)}()") do
-            local resolve = resolvers[token]
-            if resolve then
-              out[#out + 1] = template:sub(from, at - 1)
-              out[#out + 1] = resolve(agent, reference)
-              from = after
-            end
+      local protect = require("aviary.shared.protect")
+      protect(function()
+        local agent = current()
+        table.sort(names)
+        local prompts, resolvers = config.prompts, config.resolvers
+        vim.ui.select(names, { prompt = "Prompt: " }, function(name)
+          if not name then
+            return
           end
-          out[#out + 1] = template:sub(from)
-          agent:send(table.concat(out))
-        end)()
-      end)
+          local template = prompts[name]
+          protect(function()
+            local out = {}
+            local from = 1
+            for at, token, after in template:gmatch("(){([%w_]+)}()") do
+              local resolve = resolvers[token]
+              if resolve then
+                out[#out + 1] = template:sub(from, at - 1)
+                out[#out + 1] = resolve(agent, reference)
+                from = after
+              end
+            end
+            out[#out + 1] = template:sub(from)
+            agent:send(table.concat(out))
+          end)()
+        end)
+      end)()
+    end,
+    pick = function(current)
+      local protect = require("aviary.shared.protect")
+      protect(function()
+        local client = vim.api.nvim_get_chan_info(vim.b.terminal_job_id).pty
+        local agent = current()
+        local current_id = agent:id()
+        local choices = require("aviary.pigeon.backends").list()
+        assert(#choices > 0, "no Pigeon Agents or supported tools available")
+        for index, choice in ipairs(choices) do
+          if choice:id() == current_id then
+            table.insert(choices, 1, table.remove(choices, index))
+            break
+          end
+        end
+        vim.ui.select(
+          choices,
+          {
+            prompt = "Pigeon Agent: ",
+            format_item = function(choice)
+              return tostring(choice) .. (choice:id() == current_id and " [current]" or "")
+            end,
+          },
+          protect(function(choice)
+            if not choice then
+              return
+            end
+            choice:resolve():retarget(client)
+          end)
+        )
+      end)()
     end,
   },
   prompts = {
