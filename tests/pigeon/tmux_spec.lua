@@ -59,7 +59,7 @@ describe("pigeon tmux backend", function()
     local first, second = create(), create()
     assert.are_not.equal(first.session, second.session)
     assert.are_not.equal(first.pane, second.pane)
-    assert.are.equal(first.session, first:id())
+    assert.are.equal(first.pane, first:id())
     assert.are.equal("test", first.tool)
     assert.are.equal("1", query("display", "-p", "-t", "=" .. first.session .. ":", "#{session_windows}"))
     assert.are.equal("off", query("show-options", "-v", "-t", "=" .. first.session .. ":", "destroy-unattached"))
@@ -83,10 +83,10 @@ describe("pigeon tmux backend", function()
     assert.are.equal(3, #sessions)
   end)
 
-  it("uses tool and session ids independently of display strings", function()
-    local first = create()
+  it("shows pane ids that keep same-tool Agents distinguishable", function()
+    local first, second = create(), create()
     local choices = Backend.list()
-    assert.are.equal(first.session, first:id())
+    assert.are.equal(first.pane, first:id())
     local tool_choice
     for _, choice in ipairs(choices) do
       if choice.tool then
@@ -94,7 +94,11 @@ describe("pigeon tmux backend", function()
       end
     end
     assert.are.equal("test", assert(tool_choice):id())
-    assert.is_truthy(tostring(first):find(first.session, 1, true))
+    local first_label, second_label = tostring(first), tostring(second)
+    assert.are_not.equal(first_label, second_label)
+    assert.is_truthy(first_label:find(first.tool, 1, true))
+    assert.is_truthy(first_label:find(first.pane, 1, true))
+    assert.is_nil(first_label:find(first.session, 1, true))
   end)
 
   it("preserves literal Unicode, separators, format syntax and trailing semicolons in discovery", function()

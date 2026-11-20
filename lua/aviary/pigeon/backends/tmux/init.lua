@@ -7,7 +7,7 @@ local Config = require("aviary.pigeon.config")
 local Path = require("aviary.shared.path")
 
 ---@class aviary.pigeon.tmux.Agent: aviary.pigeon.Agent, aviary.pigeon.tmux.Record
----@field id fun(self: self): string return the persistent session name
+---@field id fun(self: self): string return the tmux pane id
 ---@field resolve fun(self: self): aviary.pigeon.tmux.Agent
 ---@field attach fun(self: self): string[] directly attach one client to this Agent session
 ---@field retarget fun(self: self, client: string) move the client to this Agent; raises on failure
@@ -29,11 +29,11 @@ ToolChoice.__index = ToolChoice
 local M = {}
 
 function Agent:id()
-  return self.session
+  return self.pane
 end
 
 function Agent:__tostring()
-  return (" %s %s [%s]"):format(self.tool, Path.tilde(self.cwd), self.session)
+  return (" %s %s [%s]"):format(self.tool, Path.tilde(self.cwd), self.pane)
 end
 
 function Agent:resolve()
