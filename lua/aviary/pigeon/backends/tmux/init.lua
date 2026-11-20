@@ -11,7 +11,7 @@ local Path = require("aviary.shared.path")
 ---@field resolve fun(self: self): aviary.pigeon.tmux.Agent
 ---@field attach fun(self: self): string[] directly attach one client to this Agent session
 ---@field retarget fun(self: self, client: string) move the client to this Agent; raises on failure
----@field eval fun(self: self, message: aviary.shared.Message): string evaluate borrowed Message using this Agent's cwd and current local tool format; raises on failure
+---@field eval fun(self: self, reference: aviary.pigeon.Reference): string render a borrowed reference using this Agent's cwd and current local tool format; raises on failure
 ---@field send fun(self: self, text: string) paste without focusing or submitting; empty text is ignored
 local Agent = {}
 Agent.__index = Agent
@@ -47,10 +47,14 @@ function Agent:retarget(client)
   Cli.retarget(client, self.session)
 end
 
-function Agent:eval(message)
+function Agent:eval(reference)
+  assert(reference.path ~= "", "reference has no filename")
   local config = Config()
   local tool = assert(config.tools[self.tool], "missing local tool definition: " .. self.tool)
-  return (assert(message:eval({ cwd = self.cwd, format = tool.format or config.format })))
+  local path = Path.relpath(self.cwd, reference.path)
+  local text = (tool.format or config.format)(path, reference.start_row, reference.end_row)
+  assert(type(text) == "string" and text ~= "", "reference could not be formatted: " .. reference.path)
+  return text
 end
 
 function Agent:send(text)

@@ -1,8 +1,51 @@
 # Pigeon decisions
 
-Caller contracts belong to the [Pigeon entry](../../lua/aviary/pigeon/init.lua)
-and [backend entry](../../lua/aviary/pigeon/backends/init.lua).
+Caller contracts belong to the [Pigeon entry](../../lua/aviary/pigeon/init.lua),
+[config entry](../../lua/aviary/pigeon/config.lua) and
+[backend entry](../../lua/aviary/pigeon/backends/init.lua).
 See [architecture](./architecture.md) for collaboration and resource lifetimes.
+
+## Actions own send workflows
+
+Pigeon exposes no public send function. Action handlers receive the current
+Agent and the captured reference, and call `agent:send`/`agent:eval` themselves.
+Files/buffers actions are user configuration rather than built-ins so Pigeon
+carries no picker interface or optional picker dependency; the cost is that users
+write the picker integration and own its asynchronous cleanup.
+
+## Actions receive the Agent, not the Terminal
+
+Rendering and delivery are Agent operations; the Terminal is the editor
+buffer/window frame that owns the keymaps. Passing the Agent keeps buffer, job
+and client details out of every handler, while a Terminal-buffer keymap can still
+read buffer-local terminal state such as `b:terminal_job_id` for input
+forwarding. The cost is that actions cannot reach the Terminal object directly
+and must use the keymap's buffer for terminal-level customization.
+
+## Reference capture belongs to show and pick
+
+`show()` and `pick()` snapshot the current file, cursor row or Visual whole-line
+range before changing focus. The reference is plain data stored with a
+snapshotted path, so no buffer handle has to be cleaned up or validated; the
+cost is that a reference can become stale and must be refreshed by showing the
+Terminal again.
+
+## Plain references render through the Agent
+
+A reference is a fixed-key table (`path`, optional `start_row`, optional
+`end_row`); `Agent:eval` resolves it against the Agent's cwd and formatter.
+There is no Message tree: actions join strings directly, and prompt resolvers
+receive the Agent and reference and return strings. This keeps agent-specific
+rendering in one place and lets resolvers compose freely, while users who need a
+different join or layout override the action or resolver.
+
+## Built-in actions and resolvers live in config
+
+`close` and `prompt` handlers, default prompts and built-in `file`/`line`
+resolvers live in the config defaults, so user overrides merge naturally and
+keymap validation recognizes built-in action names without a separate registry.
+The trade-off is that the config module contains the prompt workflow rather than
+only data; the alternative was an init-side built-in table duplicating the names.
 
 ## Host server, one Agent per session
 
@@ -38,13 +81,13 @@ a stale Agent fails instead of resolving to a prefix-named session.
 
 ## Terminal Agent is the delivery source
 
-A send uses the Terminal's stored Agent; it does not query tmux selection first.
-One Agent session has one window, and Pigeon changes the client only after a
-successful retarget, so this field is authoritative in supported flows. Manually
-moving the client outside Pigeon is unsupported. Disabling the Agent session's
-prefix and status line keeps normal terminal input from moving the client by
-accident. A cached Agent avoids a query before every send and makes hidden sends
-independent of focus.
+Delivery uses the Terminal's stored Agent; it does not query tmux selection
+first. One Agent session has one window, and Pigeon changes the client only after
+a successful retarget, so this field is authoritative in supported flows.
+Manually moving the client outside Pigeon is unsupported. Disabling the Agent
+session's prefix and status line keeps normal terminal input from moving the
+client by accident. A cached Agent avoids a query before every action and makes
+hidden delivery independent of focus.
 
 ## Terminal float fixes its buffer
 
@@ -73,11 +116,11 @@ that race and a queue window, so cleanup stays synchronous.
 
 `Terminal.create` starts the attach job in its hidden buffer with
 `nvim_buf_call`; the float is acquired only when shown. This lets creation
-succeed and remain usable for sends or a later show if window acquisition fails,
-and removes the ordering requirement between the job and the window. The cost is
-that the PTY initially has the temporary autocmd window's size, then resizes
-when the float opens; a tmux client can observe that initial size before the
-final one. Opening the window first would avoid the transient size but couple
+succeed and remain usable for actions or a later show if window acquisition
+fails, and removes the ordering requirement between the job and the window. The
+cost is that the PTY initially has the temporary autocmd window's size, then
+resizes when the float opens; a tmux client can observe that initial size before
+the final one. Opening the window first would avoid the transient size but couple
 Terminal creation to display.
 
 ## Geometry is applied only when a window is created
@@ -93,5 +136,5 @@ size until hidden and reopened.
 
 Neovim's terminal input may encode modified Enter differently from the outer
 terminal, even with tmux extended keys enabled. Pigeon installs no built-in
-forwarding mappings, but action handlers receive the Terminal so users can bind
-a custom action and send the sequence their environment requires.
+forwarding mappings, but a custom Terminal-buffer action can read
+`b:terminal_job_id` and send the sequence its environment requires.

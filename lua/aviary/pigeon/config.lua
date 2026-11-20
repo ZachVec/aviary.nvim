@@ -1,17 +1,22 @@
---- Pigeon owns tool definitions, Terminal options and action bindings; setup
---- acquires no resources. Setup rebuilds from defaults, rejects unknown
---- structural fields and preserves current options on failure. It validates
---- configuration data without checking executable availability, versions,
---- runtime context or key conflicts. Key sets replace defaults; actions merge
---- over built-ins. Default formatting uses plain paths and :L ranges; Claude
---- uses @ mentions, #L ranges and quotes unusual paths.
+--- Pigeon options and built-in actions.
+--- Setup rebuilds from defaults, rejects unknown fields, and preserves current
+--- options on failure; it acquires no resources. Actions receive the owning
+--- Terminal and the captured reference. Resolvers receive both and return text.
+---
+--- Config() returns borrowed, read-only running options.
+---@class aviary.pigeon.ConfigModule
+---@field setup fun(opts?: aviary.pigeon.ConfigOverrides): boolean, string? validation failure leaves previous options unchanged
+---@operator call:aviary.pigeon.Config
+local M = {}
+
+---@alias aviary.pigeon.Format fun(path: string, start_row?: integer, end_row?: integer): string?
+---@alias aviary.pigeon.Actions table<string, fun(agent: aviary.pigeon.Agent, reference: aviary.pigeon.Reference)>
+---@alias aviary.pigeon.Keymaps table<string, string[]> action name to complete key set; empty disables
+---@alias aviary.pigeon.Resolver fun(agent: aviary.pigeon.Agent, reference: aviary.pigeon.Reference): string
 
 ---@class aviary.pigeon.Tool
 ---@field command string[] nonempty argv, passed directly to the backend at creation
----@field format? aviary.shared.message.Format local override; nil uses Config.format at each send
-
----@alias aviary.pigeon.Actions table<string, fun(terminal: aviary.pigeon.Terminal)> action name to handler
----@alias aviary.pigeon.Keymaps table<string, string[]> action name to complete key set; empty disables
+---@field format? aviary.pigeon.Format local override; nil uses Config.format at each send
 
 ---@class aviary.pigeon.ViewConfig
 ---@field width number fraction of editor columns in (0, 1], or integer cells > 1
@@ -20,34 +25,32 @@
 
 ---@class aviary.pigeon.Config
 ---@field backend aviary.pigeon.BackendName
----@field format aviary.shared.message.Format default for tools without an override
+---@field format aviary.pigeon.Format default for tools without an override
 ---@field tools table<string, aviary.pigeon.Tool>
 ---@field keymaps aviary.pigeon.Keymaps mappings installed in the Terminal buffer
----@field actions aviary.pigeon.Actions handlers called with the Terminal by those mappings
+---@field actions aviary.pigeon.Actions handlers called with the current Agent and captured reference
+---@field prompts table<string, string> named prompt templates (name -> template)
+---@field resolvers table<string, aviary.pigeon.Resolver> token handlers; resolver text is concatenated verbatim
 ---@field view aviary.pigeon.ViewConfig
 
 ---@class aviary.pigeon.ConfigOverrides
 ---@field backend? aviary.pigeon.BackendName
----@field format? aviary.shared.message.Format
+---@field format? aviary.pigeon.Format
 ---@field tools? table<string, aviary.pigeon.ToolOverrides> built-ins may be partially overridden; custom tools require command
 ---@field keymaps? aviary.pigeon.Keymaps each action's key set replaces its defaults; {} disables it
 ---@field actions? aviary.pigeon.Actions built-in overrides and user-defined handlers
+---@field prompts? table<string, string> add named templates or replace matching built-ins; unmatched built-ins remain
+---@field resolvers? table<string, aviary.pigeon.Resolver> add handlers or override built-ins
 ---@field view? aviary.pigeon.ViewConfigOverrides
 
 ---@class aviary.pigeon.ToolOverrides
 ---@field command? string[]
----@field format? aviary.shared.message.Format
+---@field format? aviary.pigeon.Format
 
 ---@class aviary.pigeon.ViewConfigOverrides
 ---@field width? number
 ---@field height? number
 ---@field border? "none"|"single"|"double"|"rounded"|"solid"|"shadow"
-
---- Config() returns borrowed, read-only running options.
----@class aviary.pigeon.ConfigModule
----@field setup fun(opts?: aviary.pigeon.ConfigOverrides): boolean, string? validation failure leaves previous options unchanged
----@operator call:aviary.pigeon.Config
-local M = {}
 
 ---@type aviary.pigeon.Config
 local defaults = {
@@ -85,6 +88,48 @@ local defaults = {
   actions = {
     close = function()
       vim.api.nvim_win_close(0, true)
+    end,
+    prompt = function(agent, reference)
+      local config = M()
+      local names = vim.tbl_keys(config.prompts)
+      if #names == 0 then
+        require("aviary.shared.notify").warn("pigeon: no prompts are configured")
+        return
+      end
+      table.sort(names)
+      local prompts, resolvers = config.prompts, config.resolvers
+      vim.ui.select(names, { prompt = "Prompt: " }, function(name)
+        if not name then
+          return
+        end
+        local template = prompts[name]
+        require("aviary.shared.protect")(function()
+          local out = {}
+          local from = 1
+          for at, token, after in template:gmatch("(){([%w_]+)}()") do
+            local resolve = resolvers[token]
+            if resolve then
+              out[#out + 1] = template:sub(from, at - 1)
+              out[#out + 1] = resolve(agent, reference)
+              from = after
+            end
+          end
+          out[#out + 1] = template:sub(from)
+          agent:send(table.concat(out))
+        end)()
+      end)
+    end,
+  },
+  prompts = {
+    ["{file}"] = "{file} ",
+    ["{line}"] = "{line} ",
+  },
+  resolvers = {
+    file = function(agent, reference)
+      return agent:eval({ path = reference.path })
+    end,
+    line = function(agent, reference)
+      return agent:eval(reference)
     end,
   },
 }
@@ -161,6 +206,22 @@ function M.setup(opts)
     end
     if tool.format ~= nil and type(tool.format) ~= "function" then
       return false, "pigeon: tools." .. name .. ".format must be a function when provided"
+    end
+  end
+  if type(candidate.prompts) ~= "table" then
+    return false, "pigeon: prompts must be a table"
+  end
+  for name, template in pairs(candidate.prompts) do
+    if type(name) ~= "string" or type(template) ~= "string" then
+      return false, "pigeon: prompts must map names to string templates: " .. tostring(name)
+    end
+  end
+  if type(candidate.resolvers) ~= "table" then
+    return false, "pigeon: resolvers must be a table"
+  end
+  for name, resolve in pairs(candidate.resolvers) do
+    if type(name) ~= "string" or type(resolve) ~= "function" then
+      return false, "pigeon: resolvers must map names to functions: " .. tostring(name)
     end
   end
   if type(candidate.view) ~= "table" then

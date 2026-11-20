@@ -81,7 +81,7 @@ describe("aviary", function()
 
   it("rejects private setup paths and non-table root options", function()
     local aviary = require("aviary")
-    for _, name in ipairs({ "weaver.config", "pigeon.config", "shared.path" }) do
+    for _, name in ipairs({ "pigeon.config", "pigeon.backends", "shared.path" }) do
       assert.has_error(function()
         aviary.setup({ [name] = {} })
       end)
@@ -106,22 +106,17 @@ describe("aviary", function()
 
   it("rebuilds a named feature from defaults instead of previous root overrides", function()
     local aviary = require("aviary")
-    local Config = require("aviary.weaver.config")
+    local Config = require("aviary.pigeon.config")
     local saved, original = vim.deepcopy(aviary.config), vim.deepcopy(Config())
-    aviary.setup({ weaver = { picker = "fzf-lua", prompts = { custom = "Review {file}" } } })
-    aviary.setup({ weaver = { references = { join = " " } } })
-    local running, applied = vim.deepcopy(Config()), vim.deepcopy(aviary.config.weaver)
-    aviary.weaver.setup({
-      picker = original.picker,
-      prompts = original.prompts,
-      resolvers = original.resolvers,
-      references = original.references,
-    })
+    aviary.setup({ pigeon = { view = { width = 80 }, prompts = { custom = "Review {file}" } } })
+    aviary.setup({ pigeon = { view = { height = 0.5 } } })
+    local running, applied = vim.deepcopy(Config()), vim.deepcopy(aviary.config.pigeon)
+    aviary.pigeon.setup(original)
     aviary.config = saved
-    assert.are.equal("snacks", running.picker)
+    assert.are.equal(0.9, running.view.width)
     assert.is_nil(running.prompts.custom)
-    assert.are.equal(" ", running.references.join)
-    assert.are.same({ references = { join = " " } }, applied)
+    assert.are.equal(0.5, running.view.height)
+    assert.are.same({ view = { height = 0.5 } }, applied)
   end)
 
   it("resets omitted modules and keeps resetting them on empty setup calls", function()
@@ -209,7 +204,7 @@ describe("aviary", function()
           .. [[
         vim.opt.rtp:prepend(vim.fn.getcwd())
         local aviary = require("aviary")
-        for _, name in ipairs({ "async", "debounce", "editor", "message", "notify", "path", "process", "protect", "resources", "text", "transaction" }) do
+        for _, name in ipairs({ "async", "debounce", "editor", "notify", "path", "process", "protect", "resources", "text", "transaction" }) do
           assert(package.loaded["aviary.shared." .. name] == nil)
         end
         assert(rawget(aviary, "util") == nil)
@@ -284,22 +279,21 @@ describe("aviary", function()
 
   it("does not save a rejected slice and can retry from its previous valid config", function()
     local aviary = require("aviary")
-    aviary.setup({ weaver = { picker = "fzf-lua" } })
+    aviary.setup({ pigeon = { view = { width = 80 } } })
     assert.has_error(function()
-      aviary.setup({ weaver = { picker = 42 } })
+      aviary.setup({ pigeon = { view = { width = false } } })
     end)
-    assert.are.equal("fzf-lua", aviary.config.weaver.picker)
-    assert.are.equal("fzf-lua", require("aviary.weaver.config")().picker)
-    aviary.setup({ weaver = { picker = "snacks" } })
-    assert.are.equal("snacks", aviary.config.weaver.picker)
-    aviary.setup({ weaver = { picker = "fzf-lua" } })
+    assert.are.equal(80, aviary.config.pigeon.view.width)
+    assert.are.equal(80, require("aviary.pigeon.config")().view.width)
+    aviary.setup({ pigeon = { view = { width = 90 } } })
+    assert.are.equal(90, aviary.config.pigeon.view.width)
+    aviary.setup({ pigeon = {} })
   end)
 
   it("applies the same non-root configuration repeatedly without changing its meaning", function()
     for _, spec in ipairs({
       { name = "aviary.hawk", opts = { keymaps = { close = { "Q" } } } },
-      { name = "aviary.weaver", opts = { picker = "snacks", references = { join = " " } } },
-      { name = "aviary.pigeon", opts = { view = { width = 0.8 } } },
+      { name = "aviary.pigeon", opts = { view = { width = 0.8 }, prompts = { custom = "{file}" } } },
     }) do
       local module = require(spec.name)
       local config = require(spec.name .. ".config")
@@ -321,13 +315,6 @@ describe("aviary", function()
         valid = { keymaps = { close = { "Q" } } },
         invalid = { keymaps = false },
         field = "keymaps",
-      },
-      {
-        name = "weaver",
-        path = "aviary.weaver",
-        valid = { prompts = { custom = "{file}" }, references = { join = " " } },
-        invalid = { references = { join = 42 } },
-        field = "references.join",
       },
       {
         name = "pigeon",

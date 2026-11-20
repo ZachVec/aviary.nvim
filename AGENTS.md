@@ -29,10 +29,7 @@ make lint           # Lua diagnostics
 make links          # Markdown links
 make docs-check     # Generate Vimdoc and test the pipeline; requires pinned Pandoc
 make test-hawk      # Hawk specs
-make test-weaver    # Weaver specs, including picker
-make test-picker    # Weaver picker specs
 make test-pigeon    # Pigeon specs, including tmux integration
-make test-message   # shared.message specs
 make test           # All specs
 make check          # style + lint + test + links
 ```

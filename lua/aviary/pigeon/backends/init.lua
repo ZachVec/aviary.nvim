@@ -15,7 +15,7 @@
 ---@class aviary.pigeon.Agent: aviary.pigeon.Choice
 ---@field attach fun(self: self): string[] command that directly attaches one client to this Agent's session
 ---@field retarget fun(self: self, client: string) move an existing client to this Agent; raises on failure
----@field eval fun(self: self, message: aviary.shared.Message): string completely evaluate the borrowed Message in this Agent's context; raises on failure
+---@field eval fun(self: self, reference: aviary.pigeon.Reference): string render the borrowed reference in this Agent's context; raises on failure
 ---@field send fun(self: self, text: string) deliver without focusing or submitting; empty text is ignored
 
 ---@class aviary.pigeon.Backend

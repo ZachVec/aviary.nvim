@@ -17,7 +17,7 @@ NVIM_RUNTIME = $(shell $(NVIM) --headless -u NONE -i NONE -c 'lua io.write(vim.e
 # Avoid cwd/nvim.log when the editor holds the default log lock.
 NVIM_RUN = NVIM_LOG_FILE=$(NVIM_LOG) $(NVIM) --headless -u NONE -l
 
-.PHONY: check style lint links docs-check test test-hawk test-weaver test-picker test-pigeon test-message
+.PHONY: check style lint links docs-check test test-hawk test-pigeon
 
 ## check: Lua format + diagnostics + the mini.test suite + markdown links
 check: style lint test links
@@ -49,18 +49,6 @@ test:
 test-hawk:
 	@$(NVIM_RUN) tests/minit.lua --minitest --offline $(shell find tests/hawk -name '*_spec.lua' | sort)
 
-## test-picker: run only the Weaver's private picker specs (tests/weaver/picker/*_spec.lua)
-test-picker:
-	@$(NVIM_RUN) tests/minit.lua --minitest --offline $(shell find tests/weaver/picker -name '*_spec.lua' | sort)
-
 ## test-pigeon: live target routing and real tmux/Neovim Terminal specs (requires Unix sockets and python3)
 test-pigeon:
 	@$(NVIM_RUN) tests/minit.lua --minitest --offline $(shell find tests/pigeon -name '*_spec.lua' | sort)
-
-## test-weaver: run Weaver collectors and private picker specs
-test-weaver:
-	@$(NVIM_RUN) tests/minit.lua --minitest --offline $(shell find tests/weaver -name '*_spec.lua' | sort)
-
-## test-message: run the shared Message contracts
-test-message:
-	@$(NVIM_RUN) tests/minit.lua --minitest --offline tests/shared/message_spec.lua

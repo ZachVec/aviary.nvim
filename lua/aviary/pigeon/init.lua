@@ -1,19 +1,28 @@
 --- Pigeon owns one Terminal per Neovim. The Terminal stores its current Agent
---- and the client attached to that Agent's session; sends read this field.
+--- and the client attached to that Agent's session. Actions receive the Agent
+--- and the reference captured when show/pick last focused the Terminal.
 --- Entry creates a Terminal only when none exists and otherwise retargets the
---- existing client. Actions are synchronous except picker confirmation.
+--- existing client. Actions are synchronous except picker/select confirmation.
 --- Cancellation preserves the Terminal; failures warn once, never replay.
 local Backends = require("aviary.pigeon.backends")
 local Config = require("aviary.pigeon.config")
+local Editor = require("aviary.shared.editor")
 local Notify = require("aviary.shared.notify")
 local Resources = require("aviary.shared.resources")
 local protect = require("aviary.shared.protect")
 local transaction = require("aviary.shared.transaction")
 
+--- A captured editor location; plain data with a snapshotted path.
+---@class aviary.pigeon.Reference
+---@field path string captured absolute filename, or empty for an unnamed buffer
+---@field start_row? integer captured first selected row or cursor row; nil for a whole-file reference
+---@field end_row? integer captured last selected row; omitted for a single row
+
 ---@class aviary.pigeon.PigeonState
 ---@field window? integer current Terminal window; nil while hidden
 ---@field window_group? integer listeners owned by the current window
 ---@field terminal? aviary.pigeon.Terminal
+---@field reference? aviary.pigeon.Reference latest captured editor context
 
 ---@class aviary.pigeon.Terminal
 ---@field buffer integer
@@ -22,7 +31,6 @@ local transaction = require("aviary.shared.transaction")
 ---@field agent aviary.pigeon.Agent current Agent; first initialized by create, then by retarget
 --- Agent implements Choice, so its id is available for current-Choice marking.
 ---@field retarget fun(self: self, agent: aviary.pigeon.Agent) move this Terminal's client; failed changes preserve the previous Agent
----@field send fun(self: self, message: aviary.shared.Message) evaluate completely, then paste without focusing
 ---@field status fun(self: self): string display label for the current Agent
 local Terminal = {}
 Terminal.__index = Terminal
@@ -33,10 +41,27 @@ local state = {}
 ---@class aviary.pigeon
 ---@field pick fun() choose an existing Agent or create a tool, then show it
 ---@field show fun() show the current Agent; pick when no Terminal exists
----@field send fun(message: aviary.shared.Message) evaluate and paste into the current Agent without focusing; warn when no Terminal exists
 ---@field setup fun(opts?: aviary.pigeon.ConfigOverrides): boolean, string? rebuild configuration without replacing the Terminal
 ---@field status fun() report the current Agent without inventory discovery
 local M = {}
+
+--- Capture the current editor location for Terminal actions.
+--- Visual mode captures inclusive whole lines and returns to Normal; other modes
+--- capture the cursor row. The Pigeon Terminal cannot replace the reference.
+local function capture_reference()
+  local win = vim.api.nvim_get_current_win()
+  local buf = vim.api.nvim_win_get_buf(win)
+  if state.terminal and buf == state.terminal.buffer then
+    return
+  end
+  local path = vim.api.nvim_buf_get_name(buf)
+  local first, last = Editor.selection()
+  state.reference = {
+    path = path,
+    start_row = first,
+    end_row = first ~= last and last or nil,
+  }
+end
 
 ---@return vim.api.keyset.win_config
 local function geometry()
@@ -146,7 +171,7 @@ function Terminal.create(agent)
       local handler = cfg.actions[action]
       for _, lhs in ipairs(keys) do
         vim.keymap.set({ "n", "t" }, lhs, function()
-          handler(terminal)
+          handler(terminal.agent, state.reference)
         end, {
           buffer = buffer,
           silent = true,
@@ -185,12 +210,6 @@ function Terminal:retarget(agent)
   self.agent = agent
 end
 
----@param message aviary.shared.Message
-function Terminal:send(message)
-  local text = self.agent:eval(message)
-  self.agent:send(text)
-end
-
 ---@return string
 function Terminal:status()
   return tostring(self.agent)
@@ -198,6 +217,7 @@ end
 
 function M.pick()
   protect(function()
+    capture_reference()
     pick(function(choice)
       if not choice then
         return
@@ -216,6 +236,7 @@ end
 
 function M.show()
   protect(function()
+    capture_reference()
     local terminal = state.terminal
     if terminal then
       show(terminal.buffer)
@@ -229,14 +250,6 @@ function M.show()
         show(created.buffer)
       end)
     end
-  end)()
-end
-
----@param message aviary.shared.Message
-function M.send(message)
-  protect(function()
-    local terminal = assert(state.terminal, "Pigeon has no attached Agent; call pigeon.pick() or pigeon.show() first")
-    terminal:send(message)
   end)()
 end
 

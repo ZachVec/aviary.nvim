@@ -9,25 +9,35 @@ describe("aviary.pigeon.config", function()
   end)
   after_each(Helpers.reload_pigeon)
 
-  it("ships tools, display defaults and the close action with a selected backend", function()
+  it("ships tools, display defaults, built-in actions, prompts and resolvers", function()
     assert.are.equal("tmux", Config().backend)
     assert.are.same({ "codex" }, Config().tools.codex.command)
     assert.are.same({ "claude" }, Config().tools.claude.command)
     assert.are.same({ width = 0.9, height = 0.9, border = "rounded" }, Config().view)
     assert.are.same({ close = { "<C-.>" } }, Config().keymaps)
     assert.is_function(Config().actions.close)
+    assert.is_function(Config().actions.prompt)
+    assert.are.same({ ["{file}"] = "{file} ", ["{line}"] = "{line} " }, Config().prompts)
+    assert.is_function(Config().resolvers.file)
+    assert.is_function(Config().resolvers.line)
   end)
 
-  it("merges tool/view/action overrides and resets omitted options to defaults", function()
+  it("merges tool/view/action/template overrides and resets omitted options to defaults", function()
     local format = function(path)
       return "!" .. path
     end
     local close = function() end
+    local prompt = function() end
+    local resolve = function()
+      return "x"
+    end
     assert.is_true(Config.setup({
       format = format,
       tools = { codex = { command = { "my-codex" } }, other = { command = { "other", ";" } } },
-      keymaps = { close = { "q" } },
-      actions = { close = close },
+      keymaps = { close = { "q" }, prompt = { "<C-p>" } },
+      actions = { close = close, prompt = prompt },
+      prompts = { review = "Review {file}" },
+      resolvers = { custom = resolve },
       view = { width = 80 },
     }))
     assert.are.equal(format, Config().format)
@@ -35,11 +45,19 @@ describe("aviary.pigeon.config", function()
     assert.are.same({ "my-codex" }, Config().tools.codex.command)
     assert.are.equal(0.9, Config().view.height)
     assert.are.same({ "q" }, Config().keymaps.close)
+    assert.are.same({ "<C-p>" }, Config().keymaps.prompt)
     assert.are.equal(close, Config().actions.close)
+    assert.are.equal(prompt, Config().actions.prompt)
+    assert.are.equal("Review {file}", Config().prompts.review)
+    assert.are.equal(resolve, Config().resolvers.custom)
     assert.is_true(Config.setup())
     assert.is_nil(Config().tools.other)
     assert.are.same({ "<C-.>" }, Config().keymaps.close)
+    assert.is_nil(Config().keymaps.prompt)
     assert.is_function(Config().actions.close)
+    assert.is_function(Config().actions.prompt)
+    assert.is_nil(Config().prompts.review)
+    assert.is_nil(Config().resolvers.custom)
   end)
 
   it("replaces key sets including empty sets and accepts custom actions", function()
@@ -54,10 +72,11 @@ describe("aviary.pigeon.config", function()
     assert.is_function(Config().actions.close)
   end)
 
-  it("requires a handler for every mapped action", function()
-    local ok, reason = Config.setup({ keymaps = { missing_handler = { "<Tab>" } } })
+  it("accepts built-in actions in keymaps and rejects actions without handlers", function()
+    assert.is_true(Config.setup({ keymaps = { prompt = { "<C-p>" } } }))
+    local ok, reason = Config.setup({ keymaps = { files = { "<C-f>" } } })
     assert.is_false(ok)
-    assert.are.equal("pigeon: no handler for missing_handler", reason)
+    assert.are.equal("pigeon: no handler for files", reason)
   end)
 
   it("accepts fractions/cells without resolving editor geometry or acquiring resources", function()
@@ -104,6 +123,11 @@ describe("aviary.pigeon.config", function()
         { keymaps = { missing_handler = { "q" } } },
         { actions = false },
         { actions = { close = true } },
+        { actions = { prompt = false } },
+        { prompts = false },
+        { prompts = { bad = 42 } },
+        { resolvers = false },
+        { resolvers = { bad = 42 } },
       }) do
         local ok, reason = Config.setup(opts)
         assert.is_false(ok)

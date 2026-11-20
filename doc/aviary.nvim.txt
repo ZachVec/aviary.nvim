@@ -12,18 +12,17 @@ Table of Contents                              *aviary.nvim-table-of-contents*
 
 aviary.nvim
 
-Review Git changes and send references or text to agents displayed in Neovim.
+Review Git changes and send references or prompts to agents displayed in
+Neovim.
 
   -----------------------------------------------------------------------
   Feature                             Use it for
   ----------------------------------- -----------------------------------
   hawk |hawk.nvim|                    Review Git versions.
 
-  weaver |weaver.nvim|                Capture templates, file/buffer and
-                                      line references, and selected text.
-
-  pigeon |pigeon.nvim|                Create agents, display them in a
-                                      Terminal, and deliver Messages.
+  pigeon |pigeon.nvim|                Create agents, display a Terminal,
+                                      and run actions that send
+                                      references or prompts.
   -----------------------------------------------------------------------
 
 ==============================================================================
@@ -34,8 +33,9 @@ Review Git changes and send references or text to agents displayed in Neovim.
 - Neovim 0.11+; Git for Review.
 - Pigeon: tmux 3.8+; Neovim must run inside tmux on the default socket.
 - An installed agent CLI, such as Codex or Claude, to create its tool instance.
-- `weaver.files()` and `weaver.buffers()` require snacks.nvim <https://github.com/folke/snacks.nvim>
-    or fzf-lua <https://github.com/ibhagwan/fzf-lua>. Other choices use `vim.ui.select`.
+- Pigeon ships no picker dependency. Add your own
+    files and buffers actions |pigeon.nvim-actions-files-and-buffers-actions| for
+    whichever picker you use.
 
 
 ==============================================================================
@@ -50,25 +50,29 @@ Install with lazy.nvim:
       "ZachVec/aviary.nvim",
       main = "aviary",
       opts = {
-        weaver = { picker = "snacks" }, -- snacks | fzf-lua; files/buffers only
+        pigeon = {
+          keymaps = {
+            close = { "<C-.>" },
+            prompt = { "<C-p>" }, -- optional: open the prompt template menu
+          },
+        },
       },
       keys = {
         { "<leader>ar", function() require("aviary").hawk.show() end, desc = "Review changes" },
-        { "<leader>ac", function() require("aviary").weaver.prompt() end, mode = { "n", "x" }, desc = "Choose prompt" },
-        { "<leader>af", function() require("aviary").weaver.files() end, desc = "Send file references" },
         { "<leader>ap", function() require("aviary").pigeon.show() end, desc = "Show agent" },
       },
     }
 <
 
-See the feature manuals above, or |hawk.nvim|, |weaver.nvim| and |pigeon.nvim|.
-Use `pigeon.pick()` to choose an Agent or create a tool instance;
-`pigeon.show()` reopens this editor’s Terminal and picks when no Agent is
-attached. `<C-.>` hides it while the Agent keeps running. Select an Agent
-before sending through Pigeon or Weaver. Each Neovim attaches its own client
-directly to the chosen Agent session; sending uses that Terminal’s current
-Agent. Agent exit closes attached Terminals naturally. See selection and
-display |pigeon.nvim-exporting-and-selection| for configuration. Failed
+See the feature manuals above, or |hawk.nvim| and |pigeon.nvim|. Use
+`pigeon.pick()` to choose an Agent or create a tool instance; `pigeon.show()`
+reopens or focuses this editor’s Terminal and picks when no Agent is
+attached. `<C-.>` hides it while the Agent keeps running. `show()` and `pick()`
+capture the current file and cursor line, or the active Visual range, for
+Terminal actions. Each Neovim attaches its own client directly to the chosen
+Agent session; actions deliver through that Terminal’s current Agent. Agent
+exit closes attached Terminals naturally. See agents and display
+|pigeon.nvim-agents-and-display| for terminal and tmux behavior. Failed
 requests warn once and are never automatically replayed.
 
 Root setup accepts public feature names; nested tables belong to their feature.
@@ -83,32 +87,40 @@ validates data and acquires no runtime resources.
 ==============================================================================
 3. Workflows                                           *aviary.nvim-workflows*
 
-Weaver actions |weaver.nvim-usage| capture content and send it through
-Pigeon’s current Agent; Hawk |hawk.nvim| opens Git Review:
+Pigeon actions |pigeon.nvim-actions| run from the Terminal and receive the
+current Agent and captured reference. The built-in `prompt` action selects a
+named template and sends it; bind it in `pigeon.keymaps`. Hawk |hawk.nvim|
+opens Git Review:
 
 >lua
     local aviary = require("aviary")
-    aviary.pigeon.pick()    -- choose/create an Agent before using Weaver
-    aviary.weaver.prompt()  -- choose a template; {line} uses the cursor line or Visual range
-    aviary.weaver.files()   -- choose file references and send them
-    aviary.weaver.buffers() -- choose buffer references and send them
-    aviary.weaver.text()    -- send the active Visual lines or cursor line
-    aviary.hawk.show()      -- inspect changed files and two Git versions
+    aviary.hawk.show()   -- inspect changed files and two Git versions
+    aviary.pigeon.show() -- show/create the Terminal; captures the current reference
+    -- In the Terminal, press the prompt keymap to send a template about that reference.
 <
 
-All actions take no arguments and return nothing. Text capture delivers
-immediately; selectors deliver after confirmation. Prompt context, including
-any Visual range, is captured before template selection. Resuming a file/buffer
-picker can send again. Cancellation sends nothing. `hawk.show()` opens or
-focuses its single reusable Review tab. Review defaults to HEAD → index,
-following HEAD on refresh; Enter displays the selected file’s captured
-versions in native diff. b/B and f/F choose refs/commits, and t toggles
-merge-base comparison. Creation errors propagate after rollback. Asynchronous
-Review failures report once and leave the UI available for retry.
+The reference is the current file and cursor line, or the Visual whole-line
+range when `show()` is invoked from Visual mode. Bind `show()` for Normal and
+Visual modes with a Lua callback mapping so Visual remains active until
+capture:
 
-Choose the `{line}` prompt for the current file and cursor line or Visual
-range. This replaces the former Hawk comment action; there is no comment input
-or stored comment list. Setup configuration stays under feature names.
+>lua
+    vim.keymap.set({ "n", "x" }, "<leader>ap", function()
+      require("aviary").pigeon.show()
+    end)
+<
+
+`x` is Visual-only; `v` would also bind Select mode, where Pigeon captures only
+the cursor line. Cancellation sends nothing. `hawk.show()` opens or focuses its
+single reusable Review tab. Review defaults to HEAD → index, following HEAD
+on refresh; Enter displays the selected file’s captured versions in native
+diff. b/B and f/F choose refs/commits, and t toggles merge-base comparison.
+Creation errors propagate after rollback. Asynchronous Review failures report
+once and leave the UI available for retry.
+
+Pigeon has no built-in files/buffers actions and no picker dependency. Add an
+action for your picker; see the files and buffers example
+|pigeon.nvim-actions-files-and-buffers-actions|.
 
 
 ==============================================================================
@@ -125,12 +137,6 @@ Default Options ~
           target_ref = { "f" }, target_commit = { "F" }, toggle = { "t" },
         },
         actions = {}, -- handlers receive the owning Review Tab
-      },
-      weaver = {
-        picker = "snacks",
-        prompts = { ["{file}"] = "{file} ", ["{line}"] = "{line} " },
-        resolvers = {}, -- merges over built-in file/line resolvers
-        references = { join = "\n" },
       },
       pigeon = {
         format = function(path, first, last)
@@ -149,7 +155,9 @@ Default Options ~
           },
         },
         keymaps = { close = { "<C-.>" } },
-        actions = {}, -- handlers receive the Terminal; close is built in
+        actions = {}, -- built-in close and prompt; user handlers merge
+        prompts = { ["{file}"] = "{file} ", ["{line}"] = "{line} " },
+        resolvers = {}, -- merges over the built-in file and line resolvers
         view = { width = 0.9, height = 0.9, border = "rounded" },
       },
     })

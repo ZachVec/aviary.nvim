@@ -4,7 +4,6 @@
 local repository = vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(debug.getinfo(1, "S").source:sub(2))))
 vim.opt.runtimepath:prepend(repository)
 local Backend = require("aviary.pigeon.backends.tmux")
-local Message = require("aviary.shared.message")
 local Process = require("aviary.shared.process")
 local M = { exits = {}, exit_count = 0, notes = {} }
 
@@ -79,6 +78,20 @@ local function snapshot()
   }
 end
 
+--- Resolve the Agent behind the Terminal's attached client.
+---@return aviary.pigeon.tmux.Agent
+local function current_agent()
+  local session = snapshot().session
+  assert(session, "no attached Agent")
+  for _, choice in ipairs(Backend.list()) do
+    if choice.session == session then
+      ---@cast choice aviary.pigeon.tmux.Agent
+      return choice
+    end
+  end
+  error("missing Agent for session " .. session)
+end
+
 function M.request(encoded)
   local request = vim.json.decode(encoded)
   local action = request.action
@@ -136,10 +149,14 @@ function M.request(encoded)
     local buffer = assert(terminal_buffers()[1], "no Terminal")
     vim.api.nvim_buf_delete(buffer, { force = true })
     return true
-  elseif action == "send" or action == "reference" then
-    Pigeon.send(
-      action == "send" and Message.text(request.text) or Message.reference(request.path, request.first, request.last)
-    )
+  elseif action == "send" then
+    local agent = current_agent()
+    agent:send(request.text)
+    assert(#M.notes == 0, table.concat(M.notes, "\n"))
+    return snapshot().session
+  elseif action == "reference" then
+    local agent = current_agent()
+    agent:send(agent:eval({ path = request.path, start_row = request.first, end_row = request.last }))
     assert(#M.notes == 0, table.concat(M.notes, "\n"))
     return snapshot().session
   elseif action == "pick" then

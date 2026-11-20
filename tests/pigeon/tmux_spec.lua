@@ -1,7 +1,6 @@
 ---@module 'luassert'
 ---@type aviary.pigeon.TestHelpers
 local Helpers = require("pigeon.helpers")
-local Message = require("aviary.shared.message")
 local Process = require("aviary.shared.process")
 
 describe("pigeon tmux backend", function()
@@ -154,28 +153,35 @@ describe("pigeon tmux backend", function()
     assert(ok, err)
   end)
 
-  it("uses current local formats and evaluates fully before any delivery", function()
+  it("renders references with current local formats and rejects invalid output", function()
     local agent = create()
     assert(Config.setup({
       tools = {
         test = {
           command = { "sh" },
-          format = function(path)
-            return "!" .. path
+          format = function(path, start_row, end_row)
+            return "!" .. path .. ":" .. tostring(start_row) .. ":" .. tostring(end_row)
           end,
         },
       },
     }))
-    assert.are.equal("!a.lua", agent:eval(Message.reference(agent.cwd .. "/a.lua")))
+    assert.are.equal("!a.lua:2:3", agent:eval({ path = agent.cwd .. "/a.lua", start_row = 2, end_row = 3 }))
+    assert.has_error(function()
+      agent:eval({ path = "" })
+    end)
     local text = "HIDDEN_TEXT"
-    agent:send(agent:eval(Message.text(text)))
+    agent:send(text)
     assert(vim.wait(2000, function()
       return query("capture-pane", "-p", "-t", agent.pane):find(text, 1, true) ~= nil
     end))
     agent:send("")
+    Config.setup({ tools = { test = { command = { "sh" }, format = function() end } } })
+    assert.has_error(function()
+      agent:eval({ path = agent.cwd .. "/a.lua" })
+    end)
     Config.setup()
     assert.has_error(function()
-      agent:eval(Message.text("text"))
+      agent:eval({ path = agent.cwd .. "/a.lua" })
     end)
   end)
 end)
