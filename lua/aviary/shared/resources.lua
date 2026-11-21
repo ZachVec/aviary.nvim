@@ -18,7 +18,7 @@
 ---@field buffer fun(listed: boolean, scratch: boolean): ((fun(): integer), fun(bufnr: integer))
 ---@field window fun(bufnr: integer, enter: boolean, opts: vim.api.keyset.win_config): ((fun(): integer), fun(winnr: integer))
 ---@field tabpage fun(): ((fun(): integer), fun(tabpage: integer))
----@field augroup fun(name: string): ((fun(): integer), fun(group: integer)) name must be unique to this acquisition
+---@field augroup fun(name: string): ((fun(): integer), fun(group: integer)) callers must not share a name between live acquisitions; acquiring clears prior callbacks
 local M = {}
 
 function M.buffer(listed, scratch)

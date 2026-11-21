@@ -23,7 +23,7 @@ jobs:
           sudo tar -xzf /tmp/nvim.tar.gz -C /opt
           sudo ln -sf /opt/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim
 
-      # Pigeon's floating views require tmux 3.8's new-pane command.
+      # Exercise Pigeon's real tmux integration against its supported release.
       - name: Install tmux 3.8
         env:
           TMUX_VERSION: "3.8"

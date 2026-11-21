@@ -2,15 +2,23 @@
 
 | Term | Meaning |
 | --- | --- |
-| Tool | A named receiving program's launch command and optional reference formatter. |
-| Choice | A selectable existing destination or creation intent. Creation is deferred until resolution to a Target. |
-| Target | A resolved destination for Message evaluation and delivery. Each Neovim keeps one current Target reference, which may outlive its receiver. |
-| Receiver | A running tool instance hosted in an independent tmux session. |
-| View | A floating tmux pane attached to a Receiver; closing it leaves the Receiver running. |
+| Tool | A named Agent command and optional reference formatter. |
+| Agent | One running tool instance, backed by a persistent tmux session with exactly one agent window. It carries its tool key and launch cwd, survives editor clients, and is the selectable delivery destination. _Avoid_: Target, Receiver. |
+| Choice | An existing Agent or an intent to create one; creation waits for selection. |
+| Terminal | The Neovim buffer, optional floating window, attach job and client displaying one Agent; each editor owns at most one. It stores the client, not an Agent. |
+| Client | The tmux client attached from one Terminal, identified by its PTY/`client_name`. Multiple clients may attach to the same Agent. |
+| Current Agent | The Agent displayed by a Terminal's client, resolved from tmux when an action calls its `current()` getter. |
+| Reference | A plain snapshot of a filename and optional inclusive rows, captured when the Terminal is shown and rendered later for the current Agent. It is not a buffer handle. |
+| Action | A configured handler installed as Terminal-buffer keymaps; it receives a lazy current-Agent getter and the captured reference. Built-ins are `close`, `prompt` and `pick`. |
+| Resolver | A configured prompt-token handler receiving the Agent and reference and returning text. Built-ins are `file` and `line`. |
 
-Interfaces live in the [backend entry](../../lua/aviary/pigeon/backends/init.lua).
-See the [architecture](./architecture.md) for discovery, selection and resource
-lifetimes.
+The tmux session and window belong to their Agent. "Agent session" may be used
+when the tmux resource itself is the subject; it is not a separate entity.
+Message, Weaver, Selection, Anchor, View and Attachment are retired terms.
+"Files/buffers actions" means user-written actions that open a picker; Pigeon
+core ships none.
 
-Message and Reference are defined in the
-[shared Message glossary](../shared/message/glossary.md).
+Interfaces live in the [config entry](../../lua/aviary/pigeon/config.lua),
+[backend entry](../../lua/aviary/pigeon/backends/init.lua) and
+[Pigeon entry](../../lua/aviary/pigeon/init.lua).
+See [architecture](./architecture.md) for collaboration and resource lifetimes.

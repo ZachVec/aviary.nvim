@@ -1,8 +1,8 @@
 ---@class aviary.pigeon.TestHelpers
 ---@field reload_pigeon fun()
 ---@field notifications fun(fn: fun()): string[]
----@field targets fun(backend: aviary.pigeon.backends.tmux): aviary.pigeon.TmuxTarget[]
----@field create fun(backend: aviary.pigeon.backends.tmux, name: string): aviary.pigeon.TmuxTarget
+---@field agents fun(backend: aviary.pigeon.backends.tmux): aviary.pigeon.tmux.Agent[]
+---@field create fun(backend: aviary.pigeon.backends.tmux, name: string): aviary.pigeon.tmux.Agent
 local M = {}
 
 function M.reload_pigeon()
@@ -29,10 +29,10 @@ function M.notifications(fn)
   return seen
 end
 
-function M.targets(backend)
+function M.agents(backend)
   local result = {}
   for _, candidate in ipairs(backend.list()) do
-    if tostring(candidate):sub(1, #" ") == " " then
+    if candidate.session then
       result[#result + 1] = candidate:resolve()
     end
   end

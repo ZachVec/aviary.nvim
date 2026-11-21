@@ -1,17 +1,7 @@
---- Composition root: lazy public features, configuration, and delivery workflows.
---- The public Weaver table connects internal collectors to Pigeon.
+--- Composition root: lazy public features and configuration.
 --- Feature implementations are resolved only when configured or used.
---- Collectors own cancellation and callback timing; their startup errors propagate.
---- Delivery failures follow pigeon.send's notification contract.
----@class aviary.Weaver
----@field setup fun(opts?: aviary.weaver.ConfigOverrides): boolean, string? rebuild from defaults and opts; invalid configuration preserves previous options
----@field prompt fun() choose a prompt and deliver it through Pigeon's current/default target
----@field files fun() choose files and deliver their references after picker cleanup
----@field buffers fun() choose buffers and deliver their file references after picker cleanup
----@field text fun() capture the active Visual lines or cursor line and deliver the Message immediately
-
+--- Configuration failures raise; root setup applies slices in unspecified order.
 ---@class aviary
----@field weaver aviary.Weaver
 ---@field [string] any lazily loaded public modules
 local M = {}
 
@@ -27,24 +17,6 @@ setmetatable(M, {
     return rawget(t, k)
   end,
 })
-
-M.weaver = {
-  prompt = function()
-    require("aviary.weaver").prompt(M.pigeon.send)
-  end,
-  files = function()
-    require("aviary.weaver").files(M.pigeon.send)
-  end,
-  buffers = function()
-    require("aviary.weaver").buffers(M.pigeon.send)
-  end,
-  text = function()
-    require("aviary.weaver").text(M.pigeon.send)
-  end,
-  setup = function(opts)
-    return require("aviary.weaver").setup(opts)
-  end,
-}
 
 --- Resolve public modules only; propagate errors from existing modules.
 ---@param name string

@@ -14,7 +14,8 @@ aviary.hawk.show() -- open/focus Review: changed files below, two Git versions a
 
 Hawk manages one reusable Review tab. Creation errors propagate after resource
 rollback; asynchronous Review failures report once and retain the UI. Cancelled
-reads report nothing. Content capture belongs to [Weaver](./weaver.md).
+reads report nothing. Content capture belongs to
+[Pigeon actions](./pigeon.md#actions).
 
 ## Review
 
@@ -183,7 +184,7 @@ Tab has no default mapping.
 
 There is no custom highlight configuration. The former comments feature and
 `hawk.comments` options have been removed; use
-[Weaver's `{line}` prompt](./weaver.md#templates).
+[Pigeon's `{line}` prompt](./pigeon.md#prompts).
 
 <!-- vimdoc: hawk.nvim-health -->
 

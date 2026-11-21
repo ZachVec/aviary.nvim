@@ -1,23 +1,22 @@
 # aviary.nvim
 
-Review Git changes and send references or text to the clipboard or tmux.
+Review Git changes and send references or prompts to agents displayed in Neovim.
 
 | Feature | Use it for |
 | --- | --- |
 | [hawk](./docs/hawk.md) | Review Git versions. |
-| [weaver](./docs/weaver.md) | Capture templates, file/buffer and line references, and selected text. |
-| [pigeon](./docs/pigeon.md) | Create and select receivers, display them, and deliver Messages. |
+| [pigeon](./docs/pigeon.md) | Create agents, display a Terminal, and run actions that send references or prompts. |
 
 ## Requirements
 
 <!-- vimdoc: pigeon.nvim-requirements -->
 
 - Neovim 0.11+; Git for Review.
-- A working Neovim clipboard provider for clipboard exports.
-- Optional: tmux 3.8+ for native floating tool views; Neovim must run inside an
-  existing tmux server.
-- `weaver.files()` and `weaver.buffers()` require [snacks.nvim](https://github.com/folke/snacks.nvim)
-  or [fzf-lua](https://github.com/ibhagwan/fzf-lua). Other choices use `vim.ui.select`.
+- Pigeon: tmux 3.8+; Neovim must run inside tmux on the default socket.
+- An installed agent CLI, such as Codex or Claude, to create its tool instance.
+- Pigeon ships no picker dependency. Add your own
+  [files and buffers actions](./docs/pigeon.md#files-and-buffers-actions) for
+  whichever picker you use.
 
 ## Installation
 
@@ -30,29 +29,31 @@ Install with lazy.nvim:
   "ZachVec/aviary.nvim",
   main = "aviary",
   opts = {
-    weaver = { picker = "snacks" }, -- snacks | fzf-lua; files/buffers only
-    pigeon = { backend = { default = "clipboard" } }, -- clipboard | tmux
+    pigeon = {
+      keymaps = {
+        close = { "<C-.>" },
+        prompt = { "<C-p>" }, -- optional: open the prompt template menu
+        pick = { "<F5>" }, -- optional: switch the Terminal's Agent
+      },
+    },
   },
   keys = {
     { "<leader>ar", function() require("aviary").hawk.show() end, desc = "Review changes" },
-    { "<leader>ac", function() require("aviary").weaver.prompt() end, mode = { "n", "x" }, desc = "Choose prompt" },
-    { "<leader>af", function() require("aviary").weaver.files() end, desc = "Send file references" },
-    { "<leader>ap", function() require("aviary").pigeon.show() end, desc = "Show receiver" },
+    { "<leader>ap", function() require("aviary").pigeon.show() end, desc = "Show agent" },
   },
 }
 ```
 
-See the feature manuals above, or `:h hawk.nvim`, `:h weaver.nvim` and
-`:h pigeon.nvim`. [Receiver settings](./docs/pigeon.md#exporting-and-selection)
-apply to every Message passed to Pigeon. Use `pigeon.pick()` to choose and display
-a new tool or an existing target on the default backend. For floating tool views, set
-`pigeon.backend.default = "tmux"` and call `pigeon.show()`; without a current
-target it opens the same picker first. Receivers and views use Neovim's tmux server.
-Renaming a receiver window does not affect discovery. `C-.` returns to Neovim with
-the tool still running.
-Creation, evaluation, display and delivery failures warn and clear current. The
-next explicit action selects again. Use `pigeon.pick()` to switch explicitly; failed requests
-are never automatically replayed.
+See the feature manuals above, or `:h hawk.nvim` and `:h pigeon.nvim`.
+`pigeon.show()` reopens or focuses this editor's Terminal and chooses an Agent
+when none is attached. `<C-.>` hides it while the Agent keeps running. The
+built-in `pick` action switches the Terminal's Agent; bind it in
+`pigeon.keymaps`. `show()` captures the current file and cursor line, or the
+active Visual range, for Terminal actions. Each Neovim attaches its own client
+directly to the chosen Agent session; actions deliver through the Agent that
+client displays. Agent exit closes attached Terminals naturally. See
+[agents and display](./docs/pigeon.md#agents-and-display) for terminal and tmux
+behavior. Failed requests warn once and are never automatically replayed.
 
 Root setup accepts public feature names; nested tables belong to their feature.
 Each call rebuilds from feature defaults and the current options. Previously
@@ -64,32 +65,40 @@ acquires no runtime resources.
 
 ## Workflows
 
-[Weaver actions](./docs/weaver.md#usage) capture content and send it through
-Pigeon's current/default target; [Hawk](./docs/hawk.md) opens Git Review:
+[Pigeon actions](./docs/pigeon.md#actions) run from the Terminal and receive a
+lazy current-Agent getter and the captured reference. The built-in `prompt`
+action selects a named template and sends it, and `pick` switches the Agent;
+bind them in `pigeon.keymaps`. [Hawk](./docs/hawk.md) opens Git Review:
 
 ```lua
 local aviary = require("aviary")
-aviary.weaver.prompt()  -- choose a template; {line} uses the cursor line or Visual range
-aviary.weaver.files()   -- choose file references and send them
-aviary.weaver.buffers() -- choose buffer references and send them
-aviary.weaver.text()    -- send the active Visual lines or cursor line
-aviary.hawk.show()      -- inspect changed files and two Git versions
+aviary.hawk.show()   -- inspect changed files and two Git versions
+aviary.pigeon.show() -- show/create the Terminal; captures the current reference
+-- In the Terminal, press the prompt keymap to send a template about that reference,
+-- or the pick keymap to switch Agents.
 ```
 
-All actions take no arguments and return nothing. Text capture
-delivers immediately; selectors deliver after confirmation. Prompt context,
-including any Visual range, is captured before template selection. Resuming
-a file/buffer picker can send again. Cancellation sends nothing. `hawk.show()`
-opens or focuses its single reusable Review tab.
-Review defaults to HEAD → index, following HEAD on refresh;
-Enter displays the selected file's captured versions in native diff. b/B and f/F
-choose refs/commits, and t toggles merge-base comparison. Creation errors
-propagate after rollback. Asynchronous Review failures report once and leave the
-UI available for retry.
+The reference is the current file and cursor line, or the Visual whole-line range
+when `show()` is invoked from Visual mode. Bind `show()` for Normal and Visual
+modes with a Lua callback mapping so Visual remains active until capture:
 
-Choose the `{line}` prompt for the current file and cursor line or Visual range.
-This replaces the former Hawk comment action; there is no comment input or stored
-comment list. Setup configuration stays under feature names.
+```lua
+vim.keymap.set({ "n", "x" }, "<leader>ap", function()
+  require("aviary").pigeon.show()
+end)
+```
+
+`x` is Visual-only; `v` would also bind Select mode, where Pigeon captures only
+the cursor line. Cancellation sends nothing. `hawk.show()` opens or focuses its
+single reusable Review tab. Review defaults to HEAD → index, following HEAD on
+refresh; Enter displays the selected file's captured versions in native diff.
+b/B and f/F choose refs/commits, and t toggles merge-base comparison. Creation
+errors propagate after rollback. Asynchronous Review failures report once and
+leave the UI available for retry.
+
+Pigeon has no built-in files/buffers actions and no picker dependency. Add an
+action for your picker; see the
+[files and buffers example](./docs/pigeon.md#files-and-buffers-actions).
 
 ## Default Options
 
@@ -105,12 +114,6 @@ require("aviary").setup({
       target_ref = { "f" }, target_commit = { "F" }, toggle = { "t" },
     },
     actions = {}, -- handlers receive the owning Review Tab
-  },
-  weaver = {
-    picker = "snacks",
-    prompts = { ["{file}"] = "{file} ", ["{line}"] = "{line} " },
-    resolvers = {}, -- merges over built-in file/line resolvers
-    references = { join = "\n" },
   },
   pigeon = {
     format = function(path, first, last)
@@ -128,10 +131,11 @@ require("aviary").setup({
         end,
       },
     },
-    backend = {
-      default = "clipboard",
-      tmux = { width = "90%", height = "90%", close = "C-." },
-    },
+    keymaps = { close = { "<C-.>" } },
+    actions = {}, -- built-in close and prompt; user handlers merge
+    prompts = { ["{file}"] = "{file} ", ["{line}"] = "{line} " },
+    resolvers = {}, -- merges over the built-in file and line resolvers
+    view = { width = 0.9, height = 0.9, border = "rounded" },
   },
 })
 ```

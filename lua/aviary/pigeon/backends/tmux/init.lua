@@ -1,62 +1,71 @@
---- Compose tmux resources into Backend/Choice/Target behavior. This entry owns
---- receiver identity and formatting. CLI owns native fields and the display pane.
---- Receivers and displays live on the editor's existing server. Only marked
---- receivers participate in discovery; user sessions stay outside it.
---- Each show discovers/reuses the source's display; receivers outlive it.
---- Editor-exit cleanup is manual; no exit listener is registered.
---- Eval and send are separate fallible operations. Backends do not report exceptions.
---- Sending empty text skips delivery.
+--- Backend owns Agent creation/discovery and delivery on the host tmux server.
+--- Each Agent has one persistent session with one marked window/pane; clients
+--- attach directly to that session. Calls are synchronous and raise on failure.
+--- No UI or notifications here.
 local Cli = require("aviary.pigeon.backends.tmux.cli")
 local Config = require("aviary.pigeon.config")
 local Path = require("aviary.shared.path")
 
----@class aviary.pigeon.TmuxTarget: aviary.pigeon.Target, aviary.pigeon.Choice
----@field instance string hexadecimal creation timestamp and receiver's session name
----@field tool string local tool configuration key
----@field cwd string captured absolute agent launch directory
----@field __eq fun(self: aviary.pigeon.TmuxTarget, other: aviary.pigeon.TmuxTarget): boolean compare instance
----@field resolve fun(self: aviary.pigeon.TmuxTarget): aviary.pigeon.TmuxTarget
-local Target = {}
+---@class aviary.pigeon.tmux.Agent: aviary.pigeon.Agent, aviary.pigeon.tmux.Record
+---@field id fun(self: self): string return the tmux pane id
+---@field resolve fun(self: self): aviary.pigeon.tmux.Agent
+---@field attach fun(self: self): string[] directly attach one client to this Agent session
+---@field retarget fun(self: self, client: string) move the client to this Agent; raises on failure
+---@field eval fun(self: self, reference: aviary.pigeon.Reference): string render a borrowed reference using this Agent's cwd and current local tool format; raises on failure
+---@field send fun(self: self, text: string) paste without focusing or submitting; empty text is ignored
+local Agent = {}
+Agent.__index = Agent
 
 ---@class aviary.pigeon.tmux.ToolChoice: aviary.pigeon.Choice
----@field resolve fun(self: aviary.pigeon.tmux.ToolChoice): aviary.pigeon.TmuxTarget
----@field private tool string local tool configuration key
+---@field private tool string
+---@field id fun(self: self): string return the creation intent id
+---@field resolve fun(self: self): aviary.pigeon.tmux.Agent create a persistent Agent; editor cwd is captured at resolution
 local ToolChoice = {}
+ToolChoice.__index = ToolChoice
 
 ---@class aviary.pigeon.backends.tmux: aviary.pigeon.Backend
----@field list fun(): table<integer, aviary.pigeon.TmuxTarget|aviary.pigeon.tmux.ToolChoice>
+---@field list fun(): table<integer, aviary.pigeon.tmux.Agent|aviary.pigeon.tmux.ToolChoice> configured Agents, then sorted creation choices
+---@field current fun(client: string): aviary.pigeon.tmux.Agent Agent displayed by client; raises when the client is not attached to a Pigeon Agent
 local M = {}
 
-Target.__index, ToolChoice.__index = Target, ToolChoice
-
-function Target:__eq(other)
-  return self.instance == other.instance
+function Agent:id()
+  return self.pane
 end
 
-function Target:__tostring()
-  local instance = self.instance:gsub("^0+", "")
-  return (" %s %s [%s]"):format(self.tool, Path.tilde(self.cwd), instance ~= "" and instance or "0")
+function Agent:__tostring()
+  return (" %s %s [%s]"):format(self.tool, Path.tilde(self.cwd), self.pane)
 end
 
-function Target:resolve()
+function Agent:resolve()
   return self
 end
 
-function Target:show()
-  Cli.focus(self.instance)
+function Agent:attach()
+  return Cli.attach(self.session)
 end
 
-function Target:eval(message)
+function Agent:retarget(client)
+  Cli.retarget(client, self.session)
+end
+
+function Agent:eval(reference)
+  assert(reference.path ~= "", "reference has no filename")
   local config = Config()
   local tool = assert(config.tools[self.tool], "missing local tool definition: " .. self.tool)
-  return (assert(message:eval({ cwd = self.cwd, format = tool.format or config.format })))
+  local path = Path.relpath(self.cwd, reference.path)
+  local text = (tool.format or config.format)(path, reference.start_row, reference.end_row)
+  assert(type(text) == "string" and text ~= "", "reference could not be formatted: " .. reference.path)
+  return text
 end
 
-function Target:send(text)
-  if text == "" then
-    return
+function Agent:send(text)
+  if text ~= "" then
+    Cli.paste(self.pane, text)
   end
-  Cli.paste("=" .. self.instance .. ":", text)
+end
+
+function ToolChoice:id()
+  return self.tool
 end
 
 function ToolChoice:__tostring()
@@ -65,30 +74,20 @@ end
 
 function ToolChoice:resolve()
   local tool = assert(Config().tools[self.tool], "missing local tool definition: " .. self.tool)
-  -- Interactive timestamp collisions are accepted; tmux reports name conflicts.
-  local target = setmetatable({
-    instance = ("%024x"):format(vim.uv.hrtime()),
-    tool = self.tool,
-    cwd = vim.fs.normalize(vim.fn.getcwd()),
-  }, Target)
-  Cli.create(target.instance, target.tool, tool.command, target.cwd, {
-    status = "off",
-    prefix = "None",
-    prefix2 = "None",
-    ["destroy-unattached"] = "off",
-    ["detach-on-destroy"] = "on",
-    ["@pigeon_tool"] = self.tool,
-  })
-  return target
+  return setmetatable(Cli.create(self.tool, tool.command, vim.fs.normalize(vim.fn.getcwd())), Agent) --[[@as aviary.pigeon.tmux.Agent]]
+end
+
+function M.current(client)
+  return setmetatable(Cli.current(client), Agent) --[[@as aviary.pigeon.tmux.Agent]]
 end
 
 function M.list()
-  local config = Config()
+  ---@type table<integer, aviary.pigeon.tmux.Agent|aviary.pigeon.tmux.ToolChoice>
   local choices = {}
-  for _, session in ipairs(Cli.list()) do
-    local target = setmetatable({ instance = session.name, tool = session.tool, cwd = session.cwd }, Target)
-    if config.tools[target.tool] then
-      choices[#choices + 1] = target
+  local config = Config()
+  for _, record in ipairs(Cli.list()) do
+    if config.tools[record.tool] then
+      choices[#choices + 1] = setmetatable(record, Agent) --[[@as aviary.pigeon.tmux.Agent]]
     end
   end
   local tools = vim.tbl_keys(config.tools)

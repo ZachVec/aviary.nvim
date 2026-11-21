@@ -23,7 +23,8 @@ creating PRs remain with your existing Git tools. See installation
 
 Hawk manages one reusable Review tab. Creation errors propagate after resource
 rollback; asynchronous Review failures report once and retain the UI. Cancelled
-reads report nothing. Content capture belongs to Weaver |weaver.nvim|.
+reads report nothing. Content capture belongs to Pigeon actions
+|pigeon.nvim-actions|.
 
 
 ==============================================================================
@@ -210,8 +211,8 @@ removed; use `aviary.hawk.show()` without arguments, replacing the root
 `review()` action. Tab has no default mapping.
 
 There is no custom highlight configuration. The former comments feature and
-`hawk.comments` options have been removed; use Weaver’s `{line}` prompt
-|weaver.nvim-templates|.
+`hawk.comments` options have been removed; use Pigeon’s `{line}` prompt
+|pigeon.nvim-prompts|.
 
 *hawk.nvim-health*
 

@@ -2,120 +2,165 @@
 
 ```mermaid
 flowchart TD
-  Root["aviary · composition root"] --> Weaver["weaver · captured Message"]
-  Root --> P["pigeon · current and selection"]
-  Weaver -->|"callback wired by root"| P
-  P -->|list| B["backend · Choice inventory"]
-  B -->|resolve| T["Target"]
-  P -->|eval / show / send| T
-  T --> C["clipboard · register access"]
-  T --> TM["tmux/init.lua · Target / Choice / Message"]
-  TM --> CLI["tmux/cli.lua · list / create / focus / paste"]
-  subgraph Host["Neovim's existing tmux server"]
-    Receivers["marked receivers · aviary-pigeon key table"]
-    Views["source window · floating attach pane"]
-    Views -->|attach client| Receivers
-  end
-  CLI --> Receivers
-  CLI --> Views
-  T --> M["shared.message · evaluation"]
-  CLI -->|operation exception| P
+  Root[aviary composition root] --> P[Pigeon]
+  Editor[editor window] -->|show captures reference| P
+  P -->|list / current| B[Backend]
+  P -->|create| T[Neovim Terminal]
+  P -->|keymap dispatch: current getter| Act[Configured action]
+  Act -->|pick action: retarget| T
+  Act -->|agent:eval| F[Agent formatter]
+  Act -->|agent:send| S
+  T -->|direct attach and switch-client| S[Agent session]
+  B --> S
+  B --> C[Private tmux operations]
+  C --> S
+  S -->|one window/pane| A[Agent process]
 ```
 
-The root composes Weaver and Pigeon through captured Messages; features remain
-independent. The [root entry](../../lua/aviary/init.lua),
-[Pigeon entry](../../lua/aviary/pigeon/init.lua) and
-[backend entry](../../lua/aviary/pigeon/backends/init.lua) own interface contracts.
-Native selection is the deferred continuation; tmux execution and transactional
-acquisition are synchronous.
+The root composes the public features without feature dependencies. Pigeon owns
+one Terminal instance. Actions are configured in Pigeon's options and installed
+as Terminal-buffer keymaps; the Backend owns Agent discovery and creation; the
+Terminal owns editor resources and the tmux client. The current Agent is
+resolved from that client when an action needs it. The
+[Pigeon entry](../../lua/aviary/pigeon/init.lua),
+[config entry](../../lua/aviary/pigeon/config.lua) and
+[backend entry](../../lua/aviary/pigeon/backends/init.lua) own caller
+contracts. Only picker and template confirmation are deferred; acquisitions and
+delivery are synchronous.
 
-## Selection, evaluation and recovery
+## Reference capture
 
-Backends provide an inventory of existing Targets and tool creation Choices.
-Pigeon owns selection and current; a backend acquires a new receiver only after
-its Choice is confirmed. Pigeon commits only a fully resolved Target.
+`show()` captures the current editor location before opening any picker or
+focusing the Terminal: the inclusive whole-line Visual range after leaving
+Visual mode, or the cursor row otherwise. The captured path is snapshotted, so
+the reference is plain data rather than a buffer handle. Showing the Terminal
+from an editor refreshes the reference; invoking `show()` from the Terminal
+itself, or running the `pick` action, preserves it.
 
-Current is a selected destination reference and can outlive the receiver.
-Discovery failure or cancellation preserves it; resolution and action failures
-clear it and end the request. [Shared protect](../../lua/aviary/shared/protect.lua)
-owns exception notification while Pigeon owns state recovery. Backends propagate
-operation errors, and failed requests are not replayed.
+The same reference is passed to every action keymap invocation. Actions that
+need another location can construct a new reference table; they do not mutate
+the captured one.
 
-The selected Target evaluates the captured Message using its formatting context.
-Pigeon starts delivery only after complete evaluation succeeds, keeping partial
-Message results out of the destination. The
-[shared Message module](../../lua/aviary/shared/message.lua) owns evaluation;
-Pigeon owns ordering and recovery around it.
+## Action dispatch
 
-## Native data and business composition
+`Terminal.create` installs the configured keymaps buffer-locally. Each callback
+calls `handler(current, state.reference)` with a lazy getter that resolves the
+Agent displayed by the Terminal's client. Built-in `close`, `prompt` and `pick`
+handlers live in the config defaults, so config validation resolves their names
+like user actions. User handlers merge over defaults; no separate action module
+is involved. Handlers that do not call the getter perform no tmux lookup.
 
-The [tmux entry](../../lua/aviary/pigeon/backends/tmux/init.lua) owns receiver
-identity, tool lookup and reference formatting. Its private
-[CLI](../../lua/aviary/pigeon/backends/tmux/cli.lua) owns native command execution,
-record encoding/decoding and receiver/view resource operations.
+The built-in prompt action resolves the current Agent once, reads the running
+`prompts` and `resolvers`, captures them with the reference, opens
+`vim.ui.select`, and concatenates literal template segments with resolver
+strings. Built-in resolvers render references through `agent:eval`; custom
+resolvers receive the Agent and may do the same. The asynchronous selector
+callback renders all content before one `agent:send`, wrapped in
+[protect](../../lua/aviary/shared/protect.lua).
 
-| Target field | Native field |
-| --- | --- |
-| instance | session_name |
-| tool | @pigeon_tool |
-| cwd | pane_start_path |
+The built-in pick action resolves the current Agent, lists Choices with
+`Backends.list`, pins the current Agent in the selector, and asks the selected
+Choice to move the Terminal's client. It reads the client from the buffer-local
+terminal job and does not create a Terminal or change focus. Picker discovery and
+the asynchronous selector callback are wrapped in
+[protect](../../lua/aviary/shared/protect.lua); resolution failure warns once and
+does not open the selector.
 
-CLI discovery returns structured native records. The entry converts them into
-Targets, filters tools absent from local configuration and appends tool creation
-Choices. A nonempty @pigeon_tool establishes receiver ownership and tool identity,
-so window renames do not affect discovery. Launch cwd remains stable when the
-agent changes directory, allowing rediscovery to reconstruct reference context.
+Files/buffers actions are user configuration, not Pigeon core. They resolve the
+current Agent, open their picker, collect absolute paths, render each with
+`agent:eval`, join the strings, and call `agent:send`. Pigeon therefore has no
+picker interface or optional picker dependency.
 
-Formatting uses the target's captured launch cwd and the sending editor's current
-same-named tool configuration. Clipboard evaluation uses its own context through
-the same Message interface. Neither backend owns Pigeon's current selection.
+## Backend and delivery
 
-## Host server and independent lifetimes
+Backend discovers Agent windows marked with `@pigeon_session` and
+`@pigeon_tool`, filters tools absent from local configuration, and appends
+creation Choices. Resolving a tool Choice captures cwd and acquires one
+persistent Agent session with one window and pane. The private
+[tmux module](../../lua/aviary/pigeon/backends/tmux/cli.lua) reads the pane,
+session name, tool key and launch cwd using length-prefixed fields, preserving
+separators in tool names and paths. `Backends.current(client)` runs one
+`list-clients` query, matches the exact client PTY, and returns the Agent in that
+client's current window. It raises when the client is absent or its window is not
+a Pigeon Agent.
 
-Receivers and floating views use Neovim's existing tmux server. TMUX and TMUX_PANE
-supply trusted host context; the nested attach client reconnects to that same host
-socket with TMUX cleared. Host prerequisites belong in the
-[manual](../pigeon.md#backends).
+The first selection creates the Terminal and attaches its tmux client directly
+to the Agent session. The pick action asks the selected Agent to move that same
+client with `switch-client -c <pty> -t =<session>`; the Terminal buffer, attach
+job and client remain the same. The Terminal does not store an Agent, so the tmux
+client is the source of truth for subsequent actions. Each editor owns its
+client, so its choice does not move another editor's client; multiple clients may
+attach to the same Agent and share its input and output.
 
-Each receiver is a detached session with one agent pane. It outlives editors,
-views, source windows and source sessions; agent exit removes the receiver, and
-host server shutdown stops all receivers. Server options and user hooks remain
-shared, including extended-key behavior.
+`Agent:eval(reference)` resolves the snapshot path relative to the Agent's launch
+cwd, calls the current local tool formatter, and raises when the path is empty or
+the formatter returns no text. `Agent:send(text)` pastes the result. An action
+resolves the Agent through its getter, so delivery follows the client's current
+session; hidden Terminals keep their client, and a later action resolves the same
+Agent without focusing. Exact client matching prevents another editor's client
+from being used when the Terminal's client is not attached. Failures that the
+built-in actions own report through
+[protect](../../lua/aviary/shared/protect.lua); requests are never replayed.
 
-CLI discovers each view in its source window by the @pigeon_source pane mark.
-Native ownership distinguishes editors sharing a window and reflects manual
-closure without cached Lua display state. Reuse replaces the attach client while
-preserving the receiver process and draft; switching targets can reuse the same
-view. Views attached to one receiver share its draft and terminal size.
+## Resource lifetimes
 
-The dedicated aviary-pigeon key table is shared server state. Each show configures
-it and selects it for the receiver before acquiring the view; it is outside the
-view transaction. Its latest configuration applies to receivers using that table.
+Each Agent has an independent persistent session with one window, surviving all
+editor clients. The session sets `destroy-unattached=off` and
+`detach-on-destroy=on`; the window sets `remain-on-exit=off`. After all clients
+leave, the Agent remains. When the Agent pane exits, its window and session
+disappear and all attached clients end.
 
-## Transactions and failure ownership
+The Terminal owns a buffer, its action keymaps, a buffer-local `TermClose`
+listener, an attach job and the client PTY. The floating window and its listener
+group are acquired separately when the Terminal is shown; the window fixes its
+Terminal buffer with `winfixbuf`. Closing the Neovim window releases only the
+window and its listeners; the buffer, job and client remain. Reopening
+recalculates geometry.
+Pigeon does not listen to `VimResized`; a visible float keeps its size until it
+is hidden and reopened. Tmux applies its existing window-size policy to attached
+clients.
 
-CLI acquires and configures a receiver in one transaction. It also owns the view
-transaction, covering acquisition, configuration, dimensions, placement, attach
-and focus for both new and reused views. Shared resources provides native Neovim
-factories; tmux resources remain private to CLI.
+`TermClose` owns cleanup. Its callback snapshots and clears Pigeon state before
+touching resources. For a normal job exit or `jobstop` (`status >= 0`), it
+deletes the buffer and releases the window listener group; the fixed float
+closes with its buffer, so cleanup calls no window API. Neovim's external
+`close_buffer()` path reports `status == -1`; the outer deletion already owns
+the window and buffer, so the callback only clears state. Cleanup releases the
+listener group itself rather than relying on `WinClosed`; external deletion may
+trigger `WinClosed` first, and both paths release state idempotently.
 
-Failed view acquisition or configuration attempts cleanup and propagates the
-operation error. Rollback closes an acquired pane even when reused, while the
-receiver remains available for another view. Pigeon then invalidates current
-without taking ownership of the receiver's lifetime.
+Only one Terminal exists at a time. Entry creates one only when state is empty;
+a failed pick retarget leaves the client attached to its previous Agent.
+`TermClose` is registered after all fallible acquisition succeeds, and its
+callback clears state before using captured resources. A reentrant callback
+therefore cannot clear a newer Terminal's state, so no separate
+instance-ownership check is needed.
 
-Delivery uses existing resources and has no view acquisition transaction. Its
-command errors preserve the existing display and reach Pigeon's action recovery.
-Native attach-client exit removes the view; editor exit registers no cleanup, so
-an abandoned view remains available for manual closure.
+## Acquisition and configuration
 
-## Configuration and diagnostics
+`Terminal.create` uses [transactions](../../lua/aviary/shared/transaction.lua)
+and [resource factories](../../lua/aviary/shared/resources.lua) to acquire the
+buffer, start the attach job in that buffer with `nvim_buf_call` and read its
+client PTY. No window is required: `nvim_buf_call` makes the buffer current only
+for `jobstart(term = true)`. Buffer acquisition failure rolls back the buffer;
+the window and its listeners are acquired separately on show. Backend creates
+and configures Agent sessions through the same transaction model. `Agent.attach`
+only constructs the direct attach argv; `Agent.retarget` only switches the
+existing client.
 
-Setup merges and validates configuration without acquiring resources. Operations
-resolve selected behavior when used, including dimensions and reference formatters.
-The [health module](../../lua/aviary/pigeon/health.lua) owns read-only context,
-version and outer close-key diagnostics; it acquires no receiver or view. Backend
-operations trust the host context and propagate command errors to Pigeon.
+Configuration owns tools, formatters, float options, action bindings, templates
+and resolvers, without acquiring resources. Formatting resolves on each render;
+geometry resolves when a window is opened or reopened, while action keymaps are
+installed when the Terminal is created. The show bootstrap picker creates a
+Terminal from its Choice, while the pick action retargets the existing client;
+their selector code is intentionally separate because only the action marks the
+current Agent. Prompt templates and resolvers are captured when the action
+starts, after resolving the current Agent once and before the selector changes
+focus. The [health module](../../lua/aviary/pigeon/health.lua) diagnoses
+dependencies read-only. Native operations use the existing host server and
+inherit its configuration; the nested client clears `TMUX` and uses tmux's
+default socket. Session targets use `=` exact matching so a stale Agent fails
+instead of resolving by prefix.
 
 See the [glossary](./glossary.md), [decisions](./decisions.md) and
 [user manual](../pigeon.md).
