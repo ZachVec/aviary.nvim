@@ -254,11 +254,11 @@ There is one Terminal per Neovim, and it has one current Agent. `show()` lists
 existing Agents and creation choices in `vim.ui.select` when no Terminal
 exists; the built-in `pick` action lists them when a Terminal is attached. A
 single candidate is still passed to the configured picker. Entries begin with
-` <tool>` to create an instance or ` <tool> <launch cwd> [<session>]` to
-reuse an Agent. The pick action places the current Agent first with
-`[current]`. Discovery includes only Pigeon Agents on Neovim’s host tmux
-server whose tool names exist in local configuration. Renaming a tmux window
-does not change an Agent’s identity or formatter.
+` <tool>` to create an instance or ` <tool> <launch cwd> [<tag>]` to
+reuse an Agent; `<tag>` is the Agent’s tmux pane id. The pick action places
+the current Agent first with `[current]`. Discovery includes only Pigeon Agents
+on Neovim’s host tmux server whose tool names exist in local configuration.
+Renaming a tmux window does not change an Agent’s identity or formatter.
 
 Each Agent has its own persistent tmux session with one agent window. This
 Neovim’s client attaches directly to that session; no temporary View session
