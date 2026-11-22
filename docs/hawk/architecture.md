@@ -2,97 +2,52 @@
 
 ```mermaid
 flowchart TD
-  User["user action"] --> H["aviary.hawk.show: one current Review"]
-  H --> R["review: transactional UI and lifetime"]
-  R --> Resources["shared.resources: acquisition/rollback pairs"]
-  R --> TX["shared.transaction"]
-  R --> Async["shared.async"]
-  R --> Data["review/review: Change queries and observation"]
-  Data -->|"AviaryReviewChanged"| R
-  Data --> Async
-  Data --> Git["review/git: structured queries and blob reads"]
-  Git --> Async
+  Hawk["aviary.hawk.show"] --> Path["shared.path.git resolves the worktree"]
+  Hawk --> Tab["Tab owns the layout and query flows"]
+  Tab --> |"refresh or switch mode"| Snapshot["Snapshot owns ordered rows and the title"]
+  Snapshot --> |"query both revisions"| Git["aviary.hawk.git"]
+  Snapshot --> |"metadata followed by changes"| Row["Row describes list content"]
+  Tab --> |"draw a range"| Row
+  Row --> |"preview captured blobs"| Git
 ```
 
-The [Hawk entry](../../lua/aviary/hawk/init.lua) owns the current Review instance.
-The [Review UI](../../lua/aviary/hawk/review/init.lua) owns its concrete Tab and
-retained list state. Interface contracts belong to those entries and the
-[Review data entry](../../lua/aviary/hawk/review/review.lua).
+The [Hawk entry](../../lua/aviary/hawk/init.lua) resolves the opening worktree
+and constructs the Tab with an initial direct Snapshot. Each Tab owns its
+Snapshot, three windows and buffers, and both query cancellations. The Snapshot
+holds the fixed worktree root. [Configuration](../../lua/aviary/hawk/config.lua)
+supplies the actions each Tab binds at construction.
 
-Session comparison choices live outside the Tab and survive UI closure.
-[Configuration](../../lua/aviary/hawk/config.lua) supplies one keymap/action set,
-which Review binds to its concrete Tab after configuring the list.
+## Comparing and previewing
 
-## Transactional creation and lifetime
+Each bottom buffer line maps to one row of the active
+[Snapshot](../../lua/aviary/hawk/snapshot/init.lua). The metadata rows hold
+the `old` and `new` drafts. The default action captures the selected row before
+opening the prompt. Confirmation updates that row and asks the Tab to redraw it.
+[Rows](../../lua/aviary/hawk/snapshot/row.lua) supply text and extmark
+descriptions. The Tab applies them over the requested line range.
 
-Review creates its complete layout in a shared
-[transaction](../../lua/aviary/shared/transaction.lua), using native acquisition
-and rollback pairs from [shared resources](../../lua/aviary/shared/resources.lua).
-It owns the list and version buffers/windows, its instance group, independent
-list/body work and repository observation. Failed creation rolls back resources
-and restores source focus; Hawk publishes the instance only after success.
+On refresh the Snapshot captures the drafts, queries the
+[Git module](../../lua/aviary/hawk/git.lua), and replaces its change rows and
+title after a successful query. The Tab redraws the change range. A Git error
+leaves the last result in place. A mode switch cancels pending list work,
+installs a new Snapshot with the drafts, and redraws the complete list.
 
-The instance group contains width observers, User change subscriptions and
-lifetime listeners. Review subscribes before starting observation, registers its
-stop function for rollback and queues the first metadata refresh. The UI
-transaction ends with synchronous creation; the queued refresh runs afterward.
+On a change row, Enter starts a preview using the captured blob IDs. Git starts
+both blob reads before awaiting either. The row writes the results or the
+non-text descriptions to the Tab's two preview buffers. A new selection
+replaces pending preview work. Refresh and preview have independent flows.
 
-Closure removes the group, stops observation and list/body reads, clears list keys
-and releases window/diff settings synchronously. The close callback clears Hawk's
-current instance before deferred native reclamation removes buffers and the tab.
-That reclamation captures native IDs so the initiating native operation can
-finish without retaining the ended object. If native last-tab exit is cancelled,
-the ended instance stays stopped; reopening creates a fresh one.
+## Construction and closure
 
-## Refresh, rendering and displayed versions
+Review uses [native resource factories](../../lua/aviary/shared/resources.lua)
+inside a [transaction](../../lua/aviary/shared/transaction.lua). The complete
+layout, input labels and mappings are installed before `hawk.show()` returns.
+The result list starts empty. The first query starts with a manual refresh.
 
-Refresh coalesces queued starts and cancels superseded metadata flows. Each flow
-captures its repository and comparison choices before yielding, reads Changes and
-draws the result before committing its Snapshot. Read or drawing failure leaves
-the previous Snapshot available. Outside Git, the data layer returns an empty
-comparison that the UI commits as an empty Snapshot.
-
-Width observers redraw the retained original Changes without starting or
-cancelling metadata reads. Rendering and refresh preserve the native view;
-[Item contracts](../../lua/aviary/hawk/init.lua) define the rendered output.
-
-Metadata and body flows have independent cancellation. Refresh replaces list
-membership without replacing displayed versions; a jump reads the selected
-Change's captured blobs and labels into the reused version buffers. The Git layer
-starts both blob processes before waiting and returns their contents together.
-Process handles and output collection stay inside that layer.
-
-Revision pickers capture repository and choice data without retaining a Tab.
-Confirmation changes session choices and emits a User event; active instance
-groups receive it and queue refresh. A delayed selection from another repository
-is ignored.
-
-## Query layers and repository observation
-
-The UI owns flows around metadata, body and revision-candidate queries. The
-[Review data module](../../lua/aviary/hawk/review/review.lua) borrows each query's
-context and owns comparison rules, Change behavior and observation. The
-[Git module](../../lua/aviary/hawk/review/git.lua) owns command construction,
-execution options and parsing; its owned results transfer to Review. Git has no
-Change or UI dependency.
-
-Each UI owns one observation lifetime. The data module owns global-cwd resolution,
-its DirChanged observer and the current repository binding. Directory changes
-replace the binding and emit AviaryReviewChanged; outside Git, only the directory
-observer remains. Filesystem bursts pass through the binding's debounce before
-emission. UI subscriptions live in the instance group.
-
-A binding owns discovery cancellation separately from its completed Watch.
-Discovery obtains metadata directories asynchronously, then Watch acquires its
-debounce and native directory handles in a synchronous transaction. Publication
-happens only after success. Replacing a binding suppresses its pending discovery,
-late filesystem events and queued debounce work.
-
-Discovery and acquisition failures reach Async's default notification after
-cleanup. Filesystem callback errors close the binding and raise on the main loop;
-the directory observer remains for a later cwd change. Stopping observation
-releases both the directory observer and current binding. Manual refresh remains
-independent of observation and resolves the repository anew.
+Closure removes the instance's augroup and list mappings, cancels reads and
+releases window locks synchronously. Native reclamation uses the captured IDs
+after the originating operation finishes. If the last-tab exit is refused or
+cancelled, the ended Review stays stopped.
 
 See the [glossary](./glossary.md), [decisions](./decisions.md) and
 [user manual](../hawk.md).

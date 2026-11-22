@@ -2,11 +2,12 @@
 
 | Term | Meaning |
 | --- | --- |
-| Review | Hawk's single reusable Git review interface. |
-| Change | Captured Git change metadata with fixed blob IDs and revision labels, identifying the file versions represented by a review row. |
+| Review | A tab for comparing Git versions in a fixed worktree. |
+| Snapshot | The comparison for one mode, including its input rows, latest change rows and title. |
+| Metadata row | An input row that holds a draft value for the comparison. |
+| Diff row | A file change with captured Git metadata and blob IDs for preview. |
 
-Interfaces and lifetime contracts live in the
-[Hawk entry](../../lua/aviary/hawk/init.lua) and
-[Review entry](../../lua/aviary/hawk/review/init.lua).
-See the [architecture](./architecture.md) for collaboration and resource lifetimes.
-Review behavior is described in the [manual](../hawk.md#review).
+Interface and lifetime contracts live in [Hawk and Tab](../../lua/aviary/hawk/init.lua)
+and [Snapshot](../../lua/aviary/hawk/snapshot/init.lua). See the
+[architecture](./architecture.md) for relationships and the
+[manual](../hawk.md#review) for behavior.

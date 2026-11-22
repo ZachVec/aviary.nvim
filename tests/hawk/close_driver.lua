@@ -21,18 +21,15 @@ end
 
 vim.opt.runtimepath:prepend(vim.fn.getcwd())
 local Async = require("aviary.shared.async")
-local Data = require("aviary.hawk.review.review")
-local Review = require("aviary.hawk.review")
+local Git = require("aviary.hawk.git")
+local hawk = require("aviary").hawk
 local api = vim.api
-local reads, cancelled, close_calls = 0, 0, 0
+local reads, cancelled = 0, 0
 -- Keep the concrete metadata flow pending through native exit/confirmation.
-Data.start = function()
-  return function() end
-end
-Data.read = function(ctx)
+Git.diff = function(ctx)
   reads = reads + 1
   Async({ "hawk-exit-spec" }):run(ctx):wait()
-  return {}, nil
+  return {}
 end
 ---@diagnostic disable-next-line: duplicate-set-field
 vim.fn.jobstart = function()
@@ -43,10 +40,27 @@ vim.fn.jobstop = function()
   cancelled = cancelled + 1
   return 1
 end
-local tab = assert(Review.create(function()
-  close_calls = close_calls + 1
-end))
----@cast tab any native resource inspection
+local captured
+assert(hawk.setup({
+  keymaps = { capture = { "<F6>" } },
+  actions = {
+    capture = function(tab)
+      captured = tab
+    end,
+  },
+}))
+hawk.show()
+vim.fn.maparg("<F6>", "n", false, true).callback()
+local tab = assert(captured)
+for lnum, value in ipairs({ "main", "topic" }) do
+  api.nvim_win_set_cursor(0, { lnum, 0 })
+  local row = tab:current()
+  assert(row.kind == "meta")
+  ---@cast row aviary.hawk.snapshot.row.MetaRow
+  row:edit(value)
+end
+tab:render(0, -1)
+tab:refresh()
 local layout = {
   buf = tab.bufnr,
   windows = { tab.old_win, tab.new_win },
@@ -72,7 +86,7 @@ if scenario == "refused" or scenario == "confirm" or scenario == "ui" then
   vim.o.confirm = scenario ~= "refused"
 end
 local function check()
-  assert(reads > 0 and cancelled == reads and close_calls == 1)
+  assert(reads > 0 and cancelled == reads)
   assert(not api.nvim_buf_is_valid(layout.buf))
   for _, win in ipairs(layout.windows) do
     if api.nvim_win_is_valid(win) then
