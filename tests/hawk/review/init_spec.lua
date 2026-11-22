@@ -66,7 +66,7 @@ describe("Hawk Review UI", function()
       return api.nvim_buf_line_count(tab.bufnr) == 3
     end)
     assert.are.equal(1, queries)
-    assert.are.same({ "HEAD~1", "HEAD", "  M a.txt +1 -1" }, h.lines(tab.bufnr))
+    assert.are.same({ "HEAD~1", "HEAD", "[ ] M a.txt +1 -1" }, h.lines(tab.bufnr))
     assert.matches("HEAD~1", vim.fn.bufname(tab.bufnr))
   end)
 
@@ -167,7 +167,7 @@ describe("Hawk Review UI", function()
       assert.are.equal(vim.log.levels.ERROR, notes[#notes].level)
       assert.is_truthy(notes[#notes].message:find(value, 1, true))
       assert.is_nil(notes[#notes].message:find("stack traceback", 1, true))
-      assert.are.same({ "HEAD~1", value, "  M a.txt +1 -1" }, h.lines(tab.bufnr))
+      assert.are.same({ "HEAD~1", value, "[ ] M a.txt +1 -1" }, h.lines(tab.bufnr))
       assert.are.equal(title, vim.fn.bufname(tab.bufnr))
       assert.are.same({ "new" }, h.lines(tab.new_buf))
     end
@@ -199,7 +199,7 @@ describe("Hawk Review UI", function()
     h.wait_for(function()
       return api.nvim_buf_line_count(second.bufnr) == 3
     end)
-    assert.are.same({ "HEAD~1", "HEAD", "  M b.txt +1 -1" }, h.lines(second.bufnr))
+    assert.are.same({ "HEAD~1", "HEAD", "[ ] M b.txt +1 -1" }, h.lines(second.bufnr))
     assert.are.same({ "HEAD~1", "HEAD" }, h.lines(first.bufnr))
 
     api.nvim_set_current_win(first_win)
@@ -207,8 +207,8 @@ describe("Hawk Review UI", function()
     h.wait_for(function()
       return api.nvim_buf_line_count(first.bufnr) == 3
     end)
-    assert.are.same({ "HEAD~1", "HEAD", "  M a.txt +1 -1" }, h.lines(first.bufnr))
-    assert.are.same({ "HEAD~1", "HEAD", "  M b.txt +1 -1" }, h.lines(second.bufnr))
+    assert.are.same({ "HEAD~1", "HEAD", "[ ] M a.txt +1 -1" }, h.lines(first.bufnr))
+    assert.are.same({ "HEAD~1", "HEAD", "[ ] M b.txt +1 -1" }, h.lines(second.bufnr))
   end)
 
   it("keeps preview names distinct and stable when review tabs are renumbered", function()

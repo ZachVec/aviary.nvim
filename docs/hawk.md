@@ -34,6 +34,7 @@ worktree. An unborn `HEAD` causes a Git error when the comparison uses it.
 | --- | --- |
 | Enter | Run `hawk` on the current row |
 | `r` | Refresh the list using both input values |
+| `x` | Run `toggle_check` on the current change |
 | `q` | Close Review |
 
 Both inputs must have a value for the refresh to run. Edits, repository changes
@@ -52,9 +53,14 @@ includes the mode, `old` and `new`. The mode is  for direct and 󰓁 for
 merge-base. Commit hashes in titles are abbreviated to seven characters.
 
 Change rows display repository-relative paths in order.
-Each row shows status, full path and added/deleted line counts, such as
-`M lua/aviary/hawk/init.lua +12 -3`. Renames display both paths. Counts use
-`10k+` at 10000 lines or more. Long rows follow the window's `wrap` setting.
+Each row shows a read mark, status, full path and added/deleted line counts,
+such as `[ ] M lua/aviary/hawk/init.lua +12 -3`. Renames display both paths.
+Counts use `10k+` at 10000 lines or more. Long rows follow the window's
+`wrap` setting.
+
+The `toggle_check` action switches a change row between unread `[ ]` (`Normal`)
+and read `[x]` (`DiagnosticOk`). Read marks belong to the current list in each
+Review tab. A successful refresh starts the new list with all rows unread.
 
 `hawk` on a change loads the selected file into the readonly `old` and `new`
 windows and keeps the focus in the list. Both previews start at the top of the
@@ -85,6 +91,7 @@ require("aviary").setup({
   hawk = {
     keymaps = {
       close = { "q" }, hawk = { "<CR>" }, refresh = { "r" },
+      toggle_check = { "x" },
     },
     actions = {},
   },
@@ -102,8 +109,9 @@ the prompt opened while that row still belongs to the open Tab.
 
 | Method | Behavior |
 | --- | --- |
-| `tab:current()` | Return the selected row and its one-based buffer line. A `meta` row exposes `label`, `value` and `input`. A `diff` row exposes `path` and the change metadata. |
+| `tab:current()` | Return the selected row and its one-based buffer line. A `meta` row exposes `label`, `value` and `input`. A `diff` row exposes `path`, `checked` and the change metadata. |
 | `row:edit(value)` | Update a metadata row's draft with a single-line string. Follow with `tab:render(lnum - 1, lnum)` to redraw that row. |
+| `row:toggle_check()` | Toggle a diff row's read mark. Follow with `tab:render(lnum - 1, lnum)` to redraw that row. |
 | `row:jump(tab)` | Preview a diff row |
 | `tab:render(first, last)` | Redraw a zero-based half-open range of list lines. Use `-1` for the end of the list. |
 | `tab:refresh()` | Refresh the comparison using both inputs |

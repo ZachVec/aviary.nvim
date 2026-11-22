@@ -92,7 +92,7 @@ describe("Review Git object comparisons", function()
     assert.are.same({ "a.txt", "z\tline\n.txt" }, paths(entries))
     assert.are.same({ old = "before\n", new = "committed\n" }, text(entries[1]))
     assert.are.same({ old = "", new = "new\n" }, text(entries[2]))
-    assert.are.equal("  A z line .txt +1 -0", Row.diff(entries[2]):render(label_ns, value_ns).text)
+    assert.are.equal("[ ] A z line .txt +1 -0", Row.diff(entries[2]):render(label_ns, value_ns).text)
   end)
 
   it("compares the requested revisions directly or from their merge base", function()
@@ -110,7 +110,7 @@ describe("Review Git object comparisons", function()
     h.wait_for(function()
       return #h.lines(tab.bufnr) == 4
     end)
-    assert.are.same({ "side", "main", "  A main.txt +1 -0", "  D side.txt +0 -1" }, h.lines(tab.bufnr))
+    assert.are.same({ "side", "main", "[ ] A main.txt +1 -0", "[ ] D side.txt +0 -1" }, h.lines(tab.bufnr))
 
     tab:to("merge")
     assert.are.same({ "side", "main" }, h.lines(tab.bufnr))
@@ -120,7 +120,7 @@ describe("Review Git object comparisons", function()
     h.wait_for(function()
       return #h.lines(tab.bufnr) == 3
     end)
-    assert.are.same({ "side", "main", "  A main.txt +1 -0" }, h.lines(tab.bufnr))
+    assert.are.same({ "side", "main", "[ ] A main.txt +1 -0" }, h.lines(tab.bufnr))
   end)
 
   it("retains both rename paths and describes their byte highlight ranges", function()
@@ -130,9 +130,10 @@ describe("Review Git object comparisons", function()
     h.commit(dir)
     local row = Row.diff(assert(read())[1])
     local display = row:render(label_ns, value_ns)
-    assert.are.equal("  R a.txt → " .. path .. " +0 -0", display.text)
+    assert.are.equal("[ ] R a.txt → " .. path .. " +0 -0", display.text)
     assert.are.same(
       {
+        { "[ ]", "Normal" },
         { "R", "Changed" },
         { "a.txt → " .. path, "Directory" },
         { "+0", "Added" },
@@ -153,10 +154,10 @@ describe("Review Git object comparisons", function()
       local row = Row.diff(assert(read())[1])
       local display = row:render(label_ns, value_ns)
       local added = count == 10000 and "+10k+" or "+9999"
-      assert.are.equal("  M a.txt " .. added .. " -1", display.text)
+      assert.are.equal("[ ] M a.txt " .. added .. " -1", display.text)
       assert.are.equal(count, row.added)
       assert.are.equal(1, row.removed)
-      local mark = display.marks[3]
+      local mark = display.marks[4]
       assert.are.equal(added, display.text:sub(mark.column + 1, mark.opts.end_col))
     end
   end)
@@ -172,13 +173,13 @@ describe("Review Git object comparisons", function()
     h.git(dir, { "commit", "-qm", "file changes" })
     local entries = assert(read())
     assert.are.same({ "a.txt", "b.txt", "binary.dat", "empty.txt" }, paths(entries))
-    assert.are.equal("  M a.txt +0 -0", Row.diff(entries[1]):render(label_ns, value_ns).text)
+    assert.are.equal("[ ] M a.txt +0 -0", Row.diff(entries[1]):render(label_ns, value_ns).text)
     assert.are.equal("D", entries[2].status)
     assert.is_nil(entries[2].new_blob)
     assert.are.same({ old = "other\n", new = "" }, text(entries[2]))
     assert.are.equal("binary", entries[3].kind)
     assert.is_nil(entries[3].added)
-    assert.are.equal("  A binary.dat — —", Row.diff(entries[3]):render(label_ns, value_ns).text)
+    assert.are.equal("[ ] A binary.dat — —", Row.diff(entries[3]):render(label_ns, value_ns).text)
     assert.are.equal(0, entries[4].added)
   end)
 
@@ -188,7 +189,7 @@ describe("Review Git object comparisons", function()
     local entry = assert(read())[1]
     assert.are.equal("submodule", entry.kind)
     assert.are.equal(base, entry.new_blob)
-    assert.are.equal("  A module — —", Row.diff(entry):render(label_ns, value_ns).text)
+    assert.are.equal("[ ] A module — —", Row.diff(entry):render(label_ns, value_ns).text)
   end)
 
   it("compares remote branches and annotated tags without checking them out", function()

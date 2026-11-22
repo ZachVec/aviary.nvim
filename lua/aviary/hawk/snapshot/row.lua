@@ -1,5 +1,5 @@
 --- Review rows describe list content. Custom actions borrow read-only row fields
---- and call edit to update a draft or jump to preview a change.
+--- and use row methods to update drafts, toggle read marks or preview changes.
 local Async = require("aviary.shared.async")
 local Git = require("aviary.hawk.git")
 
@@ -39,8 +39,10 @@ RevisionRow.__index = RevisionRow
 ---@field file_kind "text"|"binary"|"submodule"
 ---@field added? integer
 ---@field removed? integer
+---@field checked boolean whether this row has been marked read in the current result
 ---@field private old_blob? string captured object ID
 ---@field private new_blob? string captured object ID
+---@field toggle_check fun(self: self) Switch the read mark. The caller redraws the changed row through its Tab.
 ---@field jump fun(self: self, tab: aviary.hawk.Tab) Preview this row in its open Tab while preserving focus.
 local DiffRow = {}
 DiffRow.__index = DiffRow
@@ -75,6 +77,7 @@ end
 function M.diff(entry)
   local row = setmetatable(entry, DiffRow) --[[@as aviary.hawk.snapshot.row.DiffRow]]
   row.file_kind, row.kind = entry.kind, "diff"
+  row.checked = false
   return row
 end
 
@@ -116,18 +119,31 @@ function DiffRow:render(_, value_ns)
   local added = self.added and ("+" .. (self.added >= 10000 and "10k+" or self.added)) or "—"
   local removed = self.removed and ("-" .. (self.removed >= 10000 and "10k+" or self.removed)) or "—"
   local path = (self.old_path and (self.old_path .. " → " .. self.path) or self.path):gsub("%c", " ")
-  local text = "  " .. self.status .. " " .. path .. " " .. added .. " " .. removed
-  local path_end = 4 + #path
+  local checkbox = self.checked and "[x]" or "[ ]"
+  local checkbox_hl = self.checked and "DiagnosticOk" or "Normal"
+  local text = checkbox .. " " .. self.status .. " " .. path .. " " .. added .. " " .. removed
+  local status_col = #checkbox + 1
+  local path_col = status_col + 2
+  local path_end = path_col + #path
   local added_end = path_end + 1 + #added
   return {
     text = text,
     marks = {
-      { namespace = value_ns, column = 2, opts = { end_col = 3, hl_group = STATUS_HL[self.status] } },
-      { namespace = value_ns, column = 4, opts = { end_col = path_end, hl_group = "Directory" } },
+      { namespace = value_ns, column = 0, opts = { end_col = #checkbox, hl_group = checkbox_hl } },
+      {
+        namespace = value_ns,
+        column = status_col,
+        opts = { end_col = status_col + 1, hl_group = STATUS_HL[self.status] },
+      },
+      { namespace = value_ns, column = path_col, opts = { end_col = path_end, hl_group = "Directory" } },
       { namespace = value_ns, column = path_end + 1, opts = { end_col = added_end, hl_group = "Added" } },
       { namespace = value_ns, column = added_end + 1, opts = { end_col = #text, hl_group = "Removed" } },
     },
   }
+end
+
+function DiffRow:toggle_check()
+  self.checked = not self.checked
 end
 
 ---@param buf integer

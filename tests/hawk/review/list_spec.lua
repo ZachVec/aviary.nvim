@@ -78,7 +78,7 @@ describe("Review list", function()
     local tab, bottom = open()
     local item = entry("current")
     ready({ item })
-    assert.are.same({ "main", "topic", "  M current +3 -2" }, h.lines(tab.bufnr))
+    assert.are.same({ "main", "topic", "[ ] M current +3 -2" }, h.lines(tab.bufnr))
     api.nvim_win_set_cursor(bottom, { 1, 0 })
     local draft, draft_line = tab:current()
     assert.are.equal("meta", draft.kind)
@@ -88,6 +88,34 @@ describe("Review list", function()
     assert.are.equal("diff", row.kind)
     assert.are.equal(item, row)
     assert.are.equal(3, row_line)
+  end)
+
+  it("toggles the selected diff row through its mapping and resets marks on refresh", function()
+    local tab, bottom = open()
+    local unread = { "main", "topic", "[ ] M first +3 -2", "[ ] M second +3 -2" }
+    ready({ entry("first"), entry("second") })
+
+    api.nvim_win_set_cursor(bottom, { 1, 0 })
+    h.press("x")
+    assert.are.same(unread, h.lines(tab.bufnr))
+
+    api.nvim_win_set_cursor(bottom, { 3, 7 })
+    h.press("x")
+    assert.are.same({ "main", "topic", "[x] M first +3 -2", "[ ] M second +3 -2" }, h.lines(tab.bufnr))
+    assert.are.same({ 3, 7 }, api.nvim_win_get_cursor(bottom))
+    local ns = api.nvim_get_namespaces()["aviary.hawk.tab.value"]
+    local marks = api.nvim_buf_get_extmarks(tab.bufnr, ns, { 2, 0 }, { 2, 0 }, { details = true })
+    assert.are.equal(1, #marks)
+    assert.are.equal("DiagnosticOk", marks[1][4].hl_group)
+    assert.are.equal(3, marks[1][4].end_col)
+    assert.is_false(vim.bo[tab.bufnr].modifiable)
+
+    h.press("x")
+    assert.are.same(unread, h.lines(tab.bufnr))
+    h.press("x")
+    tab:refresh()
+    ready({ entry("first"), entry("second") })
+    assert.are.same(unread, h.lines(tab.bufnr))
   end)
 
   it("keeps the cursor on a valid row when the change list shrinks or becomes empty", function()
@@ -111,10 +139,12 @@ describe("Review list", function()
     assert.is_true(requests[1].cancelled)
     assert.are.same({ "main", "topic" }, h.lines(tab.bufnr))
     ready({ entry("latest") })
+    api.nvim_win_set_cursor(0, { 3, 0 })
+    h.press("x")
     tab:refresh()
     requests[3].deliver(nil, "failed refresh")
     h.flush()
-    assert.are.same({ "main", "topic", "  M latest +3 -2" }, h.lines(tab.bufnr))
+    assert.are.same({ "main", "topic", "[x] M latest +3 -2" }, h.lines(tab.bufnr))
     assert.are.equal(1, #notes)
     assert.matches("failed refresh", notes[1])
   end)
@@ -123,7 +153,7 @@ describe("Review list", function()
     local tab = open()
     h.edit_input(2, "next")
     ready({ entry("submitted") })
-    assert.are.same({ "main", "next", "  M submitted +3 -2" }, h.lines(tab.bufnr))
+    assert.are.same({ "main", "next", "[ ] M submitted +3 -2" }, h.lines(tab.bufnr))
     assert.matches("main   topic$", vim.fn.bufname(tab.bufnr))
     assert.are.equal("topic", requests[1].new)
   end)
@@ -177,10 +207,11 @@ describe("Review list", function()
       spans[#spans + 1] = { mark[2], mark[3], mark[4].end_col, mark[4].hl_group }
     end
     assert.are.same({
-      { 2, 2, 3, "Changed" },
-      { 2, 4, 14, "Directory" },
-      { 2, 15, 17, "Added" },
-      { 2, 18, 20, "Removed" },
+      { 2, 0, 3, "Normal" },
+      { 2, 4, 5, "Changed" },
+      { 2, 6, 16, "Directory" },
+      { 2, 17, 19, "Added" },
+      { 2, 20, 22, "Removed" },
     }, spans)
     assert.are.same(labels, api.nvim_buf_get_extmarks(tab.bufnr, namespaces["aviary.hawk.tab.label"], 0, -1, {}))
   end)

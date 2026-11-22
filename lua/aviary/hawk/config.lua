@@ -21,6 +21,7 @@ local defaults = {
     close = { "q" },
     hawk = { "<CR>" },
     refresh = { "r" },
+    toggle_check = { "x" },
   },
   actions = {
     close = function(tab)
@@ -49,6 +50,14 @@ local defaults = {
     end,
     refresh = function(tab)
       tab:refresh()
+    end,
+    toggle_check = function(tab)
+      local row, lnum = tab:current()
+      if row.kind == "diff" then
+        ---@cast row aviary.hawk.snapshot.row.DiffRow
+        row:toggle_check()
+        tab:render(lnum - 1, lnum)
+      end
     end,
   },
 }

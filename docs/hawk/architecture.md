@@ -25,6 +25,8 @@ the `old` and `new` drafts. The default action captures the selected row before
 opening the prompt. Confirmation updates that row and asks the Tab to redraw it.
 [Rows](../../lua/aviary/hawk/snapshot/row.lua) supply text and extmark
 descriptions. The Tab applies them over the requested line range.
+The `toggle_check` action updates the selected diff row's read state and asks
+the Tab to redraw that line.
 
 On refresh the Snapshot captures the drafts, queries the
 [Git module](../../lua/aviary/hawk/git.lua), and replaces its change rows and
