@@ -1,7 +1,7 @@
 ---@module 'luassert'
 
 local Async = require("aviary.shared.async")
-local Git = require("aviary.hawk.review.git")
+local Git = require("aviary.hawk.git")
 
 local function with_jobs(work)
   local jobstart, jobstop = vim.fn.jobstart, vim.fn.jobstop
@@ -20,31 +20,6 @@ local function with_jobs(work)
   vim.fn.jobstart, vim.fn.jobstop = jobstart, jobstop
   assert(ok, reason)
 end
-
-describe("Review Git metadata queries", function()
-  it("returns unique normalized metadata directories while retaining distinct worktree directories", function()
-    for _, paths in ipairs({
-      { "/repository/.git", "/repository/.git" },
-      { "/repository/.git/", "/repository/.git" },
-      { "/repository/.git/worktrees/topic", "/repository/.git" },
-    }) do
-      with_jobs(function(jobs)
-        local result
-        Async.run(function(ctx)
-          result = Git.metadirs(ctx, "/repository")
-        end, error)
-        jobs[1].opts.on_stdout(1, { paths[1], paths[2], "" })
-        jobs[1].opts.on_exit(1, 0)
-        table.sort(result)
-        local expected = { "/repository/.git" }
-        if paths[1]:match("/worktrees/") then
-          expected[2] = "/repository/.git/worktrees/topic"
-        end
-        assert.are.same(expected, result)
-      end)
-    end
-  end)
-end)
 
 describe("Review Git version queries", function()
   it("starts both blob commands before waiting and returns structured results after out-of-order exits", function()

@@ -1,14 +1,5 @@
 local M = {}
 
---- An arbitrary destination policy, independent of receiving feature defaults.
----@param path string
----@param first? integer
----@param last? integer
----@return string
-function M.format(path, first, last)
-  return path .. (first and "[" .. first .. (last and "," .. last or "") .. "]" or "")
-end
-
 ---@param directory string
 ---@param args string[]
 ---@return string
@@ -50,12 +41,57 @@ function M.edit(path)
   vim.cmd("edit! " .. vim.fn.fnameescape(path))
 end
 
+---@param buf integer
+---@return string[]
+function M.lines(buf)
+  return vim.api.nvim_buf_get_lines(buf, 0, -1, true)
+end
+
+---@param condition fun(): boolean
+function M.wait_for(condition)
+  assert(vim.wait(5000, condition, 10), "Hawk operation did not complete")
+end
+
 ---@param lhs string
 function M.press(lhs)
   M.flush()
   local map = vim.fn.maparg(lhs, "n", false, true)
   assert(type(map.callback) == "function", "no callback for " .. lhs)
   map.callback()
+end
+
+---@param lnum integer
+---@param value? string
+function M.edit_input(lnum, value)
+  vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+  local input = vim.ui.input
+  ---@diagnostic disable-next-line: duplicate-set-field
+  vim.ui.input = function(_, confirm)
+    confirm(value)
+  end
+  local ok, err = pcall(M.press, "<CR>")
+  vim.ui.input = input
+  assert(ok, err)
+end
+
+---@return aviary.hawk.Tab, integer
+function M.open()
+  local config = require("aviary.hawk.config")
+  local previous = config()
+  local tab
+  assert(config.setup({
+    keymaps = vim.tbl_extend("force", previous.keymaps, { capture_tab = { "<F12>" } }),
+    actions = vim.tbl_extend("force", previous.actions, {
+      capture_tab = function(current)
+        tab = current
+      end,
+    }),
+  }))
+  local ok, err = pcall(require("aviary").hawk.show)
+  assert(config.setup({ keymaps = previous.keymaps, actions = previous.actions }))
+  assert(ok, err)
+  M.press("<F12>")
+  return assert(tab), vim.api.nvim_get_current_win()
 end
 
 --- Drain scheduled editor events before checking lifecycle effects.

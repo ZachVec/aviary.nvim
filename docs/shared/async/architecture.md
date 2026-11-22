@@ -55,6 +55,6 @@ retain decoded complete results while their context tracks only running jobs.
 This separates native process lifetime from coroutine reachability.
 
 Command-specific sequencing, parsing and successful result handling stay with
-callers such as the [Review Git module](../../../lua/aviary/hawk/review/git.lua).
+callers such as the [Review Git module](../../../lua/aviary/hawk/git.lua).
 The module owns execution mechanics rather than a streaming queue or general task
 scheduler.

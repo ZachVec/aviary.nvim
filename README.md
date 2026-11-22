@@ -65,15 +65,24 @@ acquires no runtime resources.
 
 ## Workflows
 
-[Pigeon actions](./docs/pigeon.md#actions) run from the Terminal and receive a
-lazy current-Agent getter and the captured reference. The built-in `prompt`
-action selects a named template and sends it, and `pick` switches the Agent;
-bind them in `pigeon.keymaps`. [Hawk](./docs/hawk.md) opens Git Review:
+[Hawk](./docs/hawk.md) opens a new Git Review tab for the global cwd's worktree.
 
 ```lua
-local aviary = require("aviary")
-aviary.hawk.show()   -- inspect changed files and two Git versions
-aviary.pigeon.show() -- show/create the Terminal; captures the current reference
+require("aviary").hawk.show()
+```
+
+Press Enter to edit the `old` and `new` revisions, then press `r` to populate
+the list. Enter on a change previews it in Neovim diff. Press `x` on a change
+to toggle its read mark. Each tab keeps its own worktree and results. See the
+[Hawk manual](./docs/hawk.md#configuration) for bindings that select a comparison mode.
+
+[Pigeon actions](./docs/pigeon.md#actions) run from the Terminal and receive a
+lazy current-Agent getter and the captured reference. Bind the built-in `prompt`
+and `pick` actions in `pigeon.keymaps`, then open Pigeon from a source file
+window:
+
+```lua
+require("aviary").pigeon.show()
 -- In the Terminal, press the prompt keymap to send a template about that reference,
 -- or the pick keymap to switch Agents.
 ```
@@ -89,12 +98,7 @@ end)
 ```
 
 `x` is Visual-only; `v` would also bind Select mode, where Pigeon captures only
-the cursor line. Cancellation sends nothing. `hawk.show()` opens or focuses its
-single reusable Review tab. Review defaults to HEAD → index, following HEAD on
-refresh; Enter displays the selected file's captured versions in native diff.
-b/B and f/F choose refs/commits, and t toggles merge-base comparison. Creation
-errors propagate after rollback. Asynchronous Review failures report once and
-leave the UI available for retry.
+the cursor line. Cancellation sends nothing.
 
 Pigeon has no built-in files/buffers actions and no picker dependency. Add an
 action for your picker; see the
@@ -109,9 +113,7 @@ action for your picker; see the
 require("aviary").setup({
   hawk = {
     keymaps = {
-      close = { "q" }, refresh = { "r" }, jump = { "<CR>" },
-      base_ref = { "b" }, base_commit = { "B" },
-      target_ref = { "f" }, target_commit = { "F" }, toggle = { "t" },
+      close = { "q" }, hawk = { "<CR>" }, refresh = { "r" },
     },
     actions = {}, -- handlers receive the owning Review Tab
   },

@@ -8,21 +8,22 @@ describe("Hawk Review options", function()
   end)
 
   it("replaces key sets including empty sets and preserves other defaults", function()
-    assert.is_true(config.setup({ keymaps = { close = {}, jump = { "o" } } }))
+    assert.is_true(config.setup({ keymaps = { close = {}, hawk = { "o" } } }))
     assert.are.same({}, config().keymaps.close)
-    assert.are.same({ "o" }, config().keymaps.jump)
-    assert.are.same({ "b" }, config().keymaps.base_ref)
+    assert.are.same({ "o" }, config().keymaps.hawk)
+    assert.are.same({ "r" }, config().keymaps.refresh)
     config.setup()
     assert.are.same({ "q" }, config().keymaps.close)
+    assert.are.same({ "<CR>" }, config().keymaps.hawk)
   end)
 
   it("rejects unknown options and invalid shapes without changing the current config", function()
-    config.setup({ keymaps = { jump = { "o" } } })
+    config.setup({ keymaps = { hawk = { "o" } } })
     local before, saved = config(), vim.deepcopy(config())
     for _, case in ipairs({
       { options = { keympas = {} }, reason = "unknown option keympas" },
       { options = { keymaps = false }, reason = "keymaps and actions must be tables" },
-      { options = { keymaps = { jump = "o" } }, reason = "keymaps must map actions to lists of keys" },
+      { options = { keymaps = { hawk = "o" } }, reason = "keymaps must map actions to lists of keys" },
       { options = { actions = { bad = true } }, reason = "actions must map names to functions" },
     }) do
       local ok, message = config.setup(case.options)
@@ -50,23 +51,74 @@ describe("Hawk Review options", function()
     assert.are.same({ "q" }, config().keymaps.close)
   end)
 
-  it("dispatches jumps to the current original item", function()
-    local selected, calls = {}, 0
+  it("asks a diff row to preview itself in the owning Tab", function()
+    local previewed
+    local row = {
+      kind = "diff",
+      jump = function(_, owner)
+        previewed = owner
+      end,
+    }
     ---@type any minimal action receiver
     local tab = {
       current = function()
-        return nil
+        return row, 3
       end,
     }
-    config().actions.jump(tab)
-    tab.current = function()
-      return selected
-    end
-    tab.jump = function(_, item)
-      assert.are.equal(selected, item)
-      calls = calls + 1
-    end
-    config().actions.jump(tab)
-    assert.are.equal(1, calls)
+    config().actions.hawk(tab)
+    assert.are.equal(tab, previewed)
   end)
+
+  for _, kind in ipairs({ "revision", "choice" }) do
+    it("edits the captured " .. kind .. " row and skips cancelled input", function()
+      local choices = { "one", "two" }
+      local confirm, edited, range
+      local row = {
+        kind = "meta",
+        input = kind == "choice" and { kind = "choice", choices = choices } or { kind = "revision", root = "/repo" },
+        edit = function(_, value)
+          edited = value
+        end,
+      }
+      local selected, lnum = row, 2
+      ---@type any minimal action receiver
+      local tab = {
+        current = function()
+          return selected, lnum
+        end,
+        render = function(_, first, last)
+          range = { first, last }
+        end,
+      }
+      local input, select_input = vim.ui.input, vim.ui.select
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.ui.input = function(opts, callback)
+        assert.are.equal("revision", kind)
+        assert.are.same({}, opts)
+        confirm = callback
+      end
+      ---@diagnostic disable-next-line: duplicate-set-field
+      vim.ui.select = function(items, opts, callback)
+        assert.are.equal("choice", kind)
+        assert.are.same(choices, items)
+        assert.are.same({}, opts)
+        confirm = callback
+      end
+      local ok, err = pcall(function()
+        local hawk = config().actions.hawk
+        hawk(tab)
+        assert(confirm)(nil)
+        assert.is_nil(edited)
+        assert.is_nil(range)
+
+        hawk(tab)
+        selected, lnum = {}, 1
+        assert(confirm)("two")
+        assert.are.equal("two", edited)
+        assert.are.same({ 1, 2 }, range)
+      end)
+      vim.ui.input, vim.ui.select = input, select_input
+      assert(ok, err)
+    end)
+  end
 end)

@@ -1,61 +1,69 @@
 --- Config() returns borrowed, read-only options.
----@class aviary.hawk.ConfigModule
----@operator call:aviary.hawk.Config
+---@class aviary.hawk.config
+---@operator call:aviary.hawk.config.Config
 local M = {}
 
----@class aviary.hawk.Options
----@field keymaps? aviary.hawk.Keymaps each action's key set replaces its defaults; {} disables it
----@field actions? aviary.hawk.Actions defaults, overrides and user-defined handlers
+--- Handlers borrow the firing Tab for the call. Input callbacks may retain it while the Tab is open.
+---@alias aviary.hawk.config.Actions table<string, fun(tab: aviary.hawk.Tab)>
+---@alias aviary.hawk.config.Keymaps table<string, string[]>
 
----@class aviary.hawk.Config
----@field keymaps aviary.hawk.Keymaps action name to complete key set
----@field actions aviary.hawk.Actions defaults, overrides and user-defined handlers
+---@class aviary.hawk.config.Options
+---@field keymaps? aviary.hawk.config.Keymaps each action's key set replaces its defaults; {} disables it
+---@field actions? aviary.hawk.config.Actions defaults, overrides and user-defined handlers
 
----@type aviary.hawk.Config
+---@class aviary.hawk.config.Config
+---@field keymaps aviary.hawk.config.Keymaps action name to complete key set
+---@field actions aviary.hawk.config.Actions defaults, overrides and user-defined handlers
+
+---@type aviary.hawk.config.Config
 local defaults = {
   keymaps = {
     close = { "q" },
+    hawk = { "<CR>" },
     refresh = { "r" },
-    jump = { "<CR>" },
-    base_ref = { "b" },
-    base_commit = { "B" },
-    target_ref = { "f" },
-    target_commit = { "F" },
-    toggle = { "t" },
+    toggle_check = { "x" },
   },
   actions = {
-    close = function()
-      vim.cmd.close()
+    close = function(tab)
+      tab:close()
+    end,
+    hawk = function(tab)
+      local row, lnum = tab:current()
+      if row.kind == "diff" then
+        ---@cast row aviary.hawk.snapshot.row.DiffRow
+        row:jump(tab)
+        return
+      end
+      ---@cast row aviary.hawk.snapshot.row.MetaRow
+      ---@param value? string
+      local function confirm(value)
+        if value ~= nil then
+          row:edit(value)
+          tab:render(lnum - 1, lnum)
+        end
+      end
+      if row.input.kind == "choice" then
+        vim.ui.select(row.input.choices, {}, confirm)
+      else
+        vim.ui.input({}, confirm)
+      end
     end,
     refresh = function(tab)
       tab:refresh()
     end,
-    jump = function(tab)
-      local item = tab:current()
-      if item then
-        tab:jump(item)
+    toggle_check = function(tab)
+      local row, lnum = tab:current()
+      if row.kind == "diff" then
+        ---@cast row aviary.hawk.snapshot.row.DiffRow
+        row:toggle_check()
+        tab:render(lnum - 1, lnum)
       end
-    end,
-    base_ref = function(tab)
-      tab:pick("base", "ref")
-    end,
-    base_commit = function(tab)
-      tab:pick("base", "commit")
-    end,
-    target_ref = function(tab)
-      tab:pick("target", "ref")
-    end,
-    target_commit = function(tab)
-      tab:pick("target", "commit")
-    end,
-    toggle = function(tab)
-      tab:toggle()
     end,
   },
 }
 local options = vim.deepcopy(defaults)
 
----@param opts? aviary.hawk.Options
+---@param opts? aviary.hawk.config.Options
 ---@return boolean ok
 ---@return string? message validation failure; previous options remain unchanged
 function M.setup(opts)
