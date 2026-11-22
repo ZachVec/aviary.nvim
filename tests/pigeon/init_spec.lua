@@ -32,7 +32,7 @@ describe("aviary.pigeon Terminal routing", function()
     function self:id()
       return name
     end
-    function self:resolve()
+    function self:materialize()
       return self
     end
     function self:retarget(client)
@@ -166,7 +166,7 @@ describe("aviary.pigeon Terminal routing", function()
     Pigeon.show()
   end)
 
-  it("installs configured action keymaps with the Terminal and passes the captured reference", function()
+  it("installs action keymaps only in Terminal mode and passes the captured reference", function()
     local inspected
     assert.is_true(Pigeon.setup({
       keymaps = { close = {}, inspect = { "<F2>" } },
@@ -183,6 +183,7 @@ describe("aviary.pigeon Terminal routing", function()
     local window = assert(vim.fn.win_findbuf(before.buffer)[1])
     assert.is_true(vim.wo[window].winfixbuf)
     assert.are.equal("", vim.fn.maparg("<C-.>", "t"))
+    assert.are.equal("", vim.fn.maparg("<F2>", "n"))
     local map = mapping(before.buffer, "<F2>")
     assert.are.equal(1, map.buffer)
     assert.are.equal(1, map.silent)

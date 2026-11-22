@@ -104,6 +104,8 @@ local defaults = {
         table.sort(names)
         local prompts, resolvers = config.prompts, config.resolvers
         vim.ui.select(names, { prompt = "Prompt: " }, function(name)
+          -- Snacks returns focus before leaving Insert mode and calls on_choice afterward.
+          vim.cmd.startinsert()
           if not name then
             return
           end
@@ -148,10 +150,11 @@ local defaults = {
             end,
           },
           protect(function(choice)
+            vim.cmd.startinsert()
             if not choice then
               return
             end
-            choice:resolve():retarget(client)
+            choice:materialize():retarget(client)
           end)
         )
       end)()
