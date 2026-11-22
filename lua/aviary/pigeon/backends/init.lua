@@ -1,6 +1,6 @@
 --- Private synchronous backend contracts. Each backend supplies its own Choices
---- and Agents. No resources are acquired until a Choice resolves or an Agent
---- attaches. Calls raise on failure; backends do not notify or replay.
+--- and Agents. Listing Choices defers Agent creation to materialize(). Calls
+--- raise on failure; backends do not notify or replay.
 --- Choice ids are stable and unique within one backend's Choice list; strings
 --- are display only. An Agent's client handle belongs to its Terminal.
 ---@alias aviary.pigeon.BackendName "tmux"
@@ -8,10 +8,9 @@
 ---@class aviary.pigeon.Choice
 ---@field id fun(self: self): string stable identity within this backend; creation choices return their creation intent
 ---@field __tostring fun(self: self): string display label
----@field resolve fun(self: self): aviary.pigeon.Agent resolve synchronously; creation failures roll back acquired resources
+---@field materialize fun(self: self): aviary.pigeon.Agent return the existing Agent or create a new one for this Choice. Creation failures roll back acquired resources.
 
---- An Agent is also a Choice: it is an existing selectable target and resolves
---- to itself. Creation intents remain Choice-only implementations.
+--- An Agent is also a Choice and returns itself from materialize().
 ---@class aviary.pigeon.Agent: aviary.pigeon.Choice
 ---@field attach fun(self: self): string[] command that directly attaches one client to this Agent's session
 ---@field retarget fun(self: self, client: string) move an existing client to this Agent; raises on failure

@@ -43,7 +43,7 @@ the captured one.
 
 ## Action dispatch
 
-`Terminal.create` installs the configured keymaps buffer-locally. Each callback
+`Terminal.create` installs buffer-local keymaps for Terminal mode. Each callback
 calls `handler(current, state.reference)` with a lazy getter that resolves the
 Agent displayed by the Terminal's client. Built-in `close`, `prompt` and `pick`
 handlers live in the config defaults, so config validation resolves their names
@@ -59,9 +59,10 @@ callback renders all content before one `agent:send`, wrapped in
 [protect](../../lua/aviary/shared/protect.lua).
 
 The built-in pick action resolves the current Agent, lists Choices with
-`Backends.list`, pins the current Agent in the selector, and asks the selected
-Choice to move the Terminal's client. It reads the client from the buffer-local
-terminal job and does not create a Terminal or change focus. Picker discovery and
+`Backends.list`, and pins the current Agent in the selector. After confirmation,
+it materializes the selected Choice and asks the resulting Agent to move the
+Terminal's client. It reads the client from the buffer-local terminal job
+and does not create a Terminal or change focus. Picker discovery and
 the asynchronous selector callback are wrapped in
 [protect](../../lua/aviary/shared/protect.lua); resolution failure warns once and
 does not open the selector.
@@ -75,7 +76,7 @@ picker interface or optional picker dependency.
 
 Backend discovers Agent windows marked with `@pigeon_session` and
 `@pigeon_tool`, filters tools absent from local configuration, and appends
-creation Choices. Resolving a tool Choice captures cwd and acquires one
+creation Choices. Materializing a tool Choice captures cwd and acquires one
 persistent Agent session with one window and pane. The private
 [tmux module](../../lua/aviary/pigeon/backends/tmux/cli.lua) reads the pane,
 session name, tool key and launch cwd using length-prefixed fields, preserving

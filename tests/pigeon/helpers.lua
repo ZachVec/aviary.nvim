@@ -33,7 +33,7 @@ function M.agents(backend)
   local result = {}
   for _, candidate in ipairs(backend.list()) do
     if candidate.session then
-      result[#result + 1] = candidate:resolve()
+      result[#result + 1] = candidate:materialize()
     end
   end
   return result
@@ -42,7 +42,7 @@ end
 function M.create(backend, name)
   for _, candidate in ipairs(backend.list()) do
     if tostring(candidate) == " " .. name then
-      return candidate:resolve()
+      return candidate:materialize()
     end
   end
   error("missing tool choice: " .. name, 0)

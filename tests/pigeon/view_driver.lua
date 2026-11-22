@@ -117,7 +117,7 @@ function M.request(encoded)
     }))
     for _, choice in ipairs(Backend.list()) do
       if choice:id() == request.tool and not choice.session then
-        local agent = choice:resolve()
+        local agent = choice:materialize()
         return {
           id = agent:id(),
           session = agent.session,
@@ -154,6 +154,33 @@ function M.request(encoded)
     end)
     vim.ui.select = saved
     assert(ok, err)
+  elseif action == "floating-picker" then
+    local native_select = vim.ui.select
+    vim.ui.select = function(choices, _, on_choice)
+      vim.ui.select = native_select
+      local origin = vim.api.nvim_get_current_win()
+      local buffer = vim.api.nvim_create_buf(false, true)
+      vim.bo[buffer].bufhidden = "wipe"
+      vim.bo[buffer].buftype = "prompt"
+      vim.api.nvim_buf_set_lines(buffer, 0, -1, false, { "Floating picker" })
+      local window = vim.api.nvim_open_win(buffer, true, {
+        relative = "editor",
+        row = 2,
+        col = 2,
+        width = 30,
+        height = 1,
+        style = "minimal",
+      })
+      vim.keymap.set("i", "<CR>", function()
+        vim.cmd.stopinsert()
+        vim.api.nvim_set_current_win(origin)
+        vim.schedule(function()
+          vim.api.nvim_win_close(window, true)
+          on_choice(choices[2], 2)
+        end)
+      end, { buffer = buffer })
+      vim.schedule(vim.cmd.startinsert)
+    end
   elseif action == "show" then
     Pigeon.show()
   elseif action == "exit-client" then

@@ -8,7 +8,7 @@ local Path = require("aviary.shared.path")
 
 ---@class aviary.pigeon.tmux.Agent: aviary.pigeon.Agent, aviary.pigeon.tmux.Record
 ---@field id fun(self: self): string return the tmux pane id
----@field resolve fun(self: self): aviary.pigeon.tmux.Agent
+---@field materialize fun(self: self): aviary.pigeon.tmux.Agent
 ---@field attach fun(self: self): string[] directly attach one client to this Agent session
 ---@field retarget fun(self: self, client: string) move the client to this Agent; raises on failure
 ---@field eval fun(self: self, reference: aviary.pigeon.Reference): string render a borrowed reference using this Agent's cwd and current local tool format; raises on failure
@@ -19,7 +19,7 @@ Agent.__index = Agent
 ---@class aviary.pigeon.tmux.ToolChoice: aviary.pigeon.Choice
 ---@field private tool string
 ---@field id fun(self: self): string return the creation intent id
----@field resolve fun(self: self): aviary.pigeon.tmux.Agent create a persistent Agent; editor cwd is captured at resolution
+---@field materialize fun(self: self): aviary.pigeon.tmux.Agent create a persistent Agent using the editor cwd at call time
 local ToolChoice = {}
 ToolChoice.__index = ToolChoice
 
@@ -36,7 +36,7 @@ function Agent:__tostring()
   return (" %s %s [%s]"):format(self.tool, Path.tilde(self.cwd), self.pane)
 end
 
-function Agent:resolve()
+function Agent:materialize()
   return self
 end
 
@@ -72,7 +72,7 @@ function ToolChoice:__tostring()
   return " " .. self.tool
 end
 
-function ToolChoice:resolve()
+function ToolChoice:materialize()
   local tool = assert(Config().tools[self.tool], "missing local tool definition: " .. self.tool)
   return setmetatable(Cli.create(self.tool, tool.command, vim.fs.normalize(vim.fn.getcwd())), Agent) --[[@as aviary.pigeon.tmux.Agent]]
 end

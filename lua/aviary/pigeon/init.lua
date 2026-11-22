@@ -124,7 +124,7 @@ function Terminal.create(agent)
     for action, keys in pairs(cfg.keymaps) do
       local handler = cfg.actions[action]
       for _, lhs in ipairs(keys) do
-        vim.keymap.set({ "n", "t" }, lhs, function()
+        vim.keymap.set("t", lhs, function()
           handler(current, state.reference)
         end, {
           buffer = buffer,
@@ -192,7 +192,7 @@ function M.show()
         if not choice then
           return
         end
-        local created = Terminal.create(choice:resolve())
+        local created = Terminal.create(choice:materialize())
         show(created.buffer)
       end)
     )

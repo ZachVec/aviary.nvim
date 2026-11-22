@@ -240,6 +240,15 @@ class Experiment:
         self.wait(lambda: self.selected(a, first) and self.rpc(a)["mode"] == "t", "native picker returns to terminal mode")
         self.check("pick key opens the native picker, switches Agent, and returns to terminal input mode")
 
+        self.rpc(a, "floating-picker")
+        self.tmux("send-keys", "-t", a["pane"], "F5")
+        self.wait(lambda: self.rpc(a)["mode"] == "i", "floating picker input")
+        self.tmux("send-keys", "-t", a["pane"], "Enter")
+        self.wait(lambda: self.selected(a, second) and self.rpc(a)["mode"] == "t", "floating picker returns to terminal mode")
+        self.rpc(a, "select", target=first)
+        self.wait(lambda: self.selected(a, first), "restore first Agent for input checks")
+        self.check("floating picker confirmation switches Agent and resumes Terminal input")
+
         before = len(self.received(first))
         os.write(a["master"], b"KEYBOARD")
         self.wait(lambda: b"KEYBOARD" in self.received(first)[before:], "physical key path")
