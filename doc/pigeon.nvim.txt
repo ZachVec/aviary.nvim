@@ -63,16 +63,16 @@ call it once and cache the result when a handler needs the Agent more than
 once. `close` and actions that do not use the Agent never call it, so they
 perform no tmux lookup.
 
-Keymaps and actions are resolved when the Terminal is created, installed
-buffer-locally in Normal and Terminal modes, and later setup changes apply to
-new Terminals. Every mapped action needs a handler; built-ins are available by
+Pigeon resolves keymaps and actions when it creates the Terminal. The keymaps
+are buffer-local and active in Terminal mode. Later setup changes apply to new
+Terminals. Every mapped action needs a handler. Built-ins are available by
 name.
 
 Built-ins are `close`, `prompt` and `pick`. `close` closes the current window.
 `prompt` selects a named template and sends it. `pick` switches the
-Terminal’s Agent and marks the current Agent in its selector. `prompt` and
-`pick` have no default keys so they cannot conflict with an Agent’s own
-input; configure the ones you want:
+Terminal’s Agent and marks the current Agent in its selector. Both selectors
+resume Terminal input on confirmation or cancellation. `prompt` and `pick` use
+only the keys you configure.
 
 >lua
     require("aviary").setup({
