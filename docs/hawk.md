@@ -150,6 +150,45 @@ require("aviary").setup({
 })
 ```
 
+### Revision picker
+
+The default action accepts any Git revision. Bind an additional action to pick a
+branch or tag with your picker; the input remains available for expressions such
+as `HEAD~2`. The action only acts on revision rows.
+
+```lua
+require("aviary").setup({
+  hawk = {
+    keymaps = {
+      pick_revision = { "<leader>hr" },
+    },
+    actions = {
+      pick_revision = function(tab)
+        local row, lnum = tab:current()
+        if row.kind ~= "meta" then
+          return
+        end
+        if row.input.kind ~= "revision" then
+          return
+        end
+        local refs = vim.fn.systemlist({
+          "git", "-C", row.input.root, "for-each-ref",
+          "--format=%(refname:short)", "refs/heads", "refs/remotes", "refs/tags",
+        })
+        vim.ui.select(refs, { prompt = "Revision:" }, function(value)
+          if value then
+            row:edit(value)
+            tab:render(lnum - 1, lnum)
+          end
+        end)
+      end,
+    },
+  },
+})
+```
+
+Replace `vim.ui.select` with your picker's selection function when you use one.
+
 Full contracts live in [Hawk and Tab](../lua/aviary/hawk/init.lua)
 and [Row](../lua/aviary/hawk/snapshot/row.lua).
 
