@@ -52,8 +52,8 @@ assert(hawk.setup({
 hawk.show()
 vim.fn.maparg("<F6>", "n", false, true).callback()
 local tab = assert(captured)
-for lnum, value in ipairs({ "main", "topic" }) do
-  api.nvim_win_set_cursor(0, { lnum, 0 })
+for index, value in ipairs({ "main", "topic" }) do
+  api.nvim_win_set_cursor(0, { index + 1, 0 })
   local row = tab:current()
   assert(row.kind == "meta")
   ---@cast row aviary.hawk.snapshot.row.MetaRow

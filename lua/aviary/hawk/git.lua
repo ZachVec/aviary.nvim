@@ -24,8 +24,7 @@ local Async = require("aviary.shared.async")
 
 ---@class aviary.hawk.git
 ---@field Error table metatable of a failed comparison command
----@field merge_base fun(ctx: AsyncContext, root: string, old: string, new: string): string common ancestor's full SHA for the given revisions
----@field diff fun(ctx: AsyncContext, root: string, old: string, new: string): aviary.hawk.git.Entry[] sorted metadata captured from the two revisions
+---@field diff fun(ctx: AsyncContext, root: string, old: string, new: string, merge_base?: boolean): aviary.hawk.git.Entry[] sorted metadata captured from the two revisions or, when merge_base is true, from their common ancestor to new
 ---@field versions fun(ctx: AsyncContext, root: string, old_oid?: string, new_oid?: string): aviary.hawk.git.Versions Read captured blobs concurrently.
 local M = {
   Error = {
@@ -120,11 +119,9 @@ local function stdout(ctx, root, command)
   return result.stdout
 end
 
-function M.merge_base(ctx, root, old, new)
-  return vim.trim(stdout(ctx, root, git("merge-base", "--end-of-options", old, new)))
-end
-
-function M.diff(ctx, root, old, new)
+function M.diff(ctx, root, old, new, merge_base)
+  local revisions = merge_base and { old .. "..." .. new } or { old, new }
+  revisions[#revisions + 1] = "--"
   local command = git(
     "diff",
     "--no-ext-diff",
@@ -137,9 +134,7 @@ function M.diff(ctx, root, old, new)
     "--no-abbrev",
     "-z",
     "--end-of-options",
-    old,
-    new,
-    "--"
+    unpack(revisions)
   )
   return parse(root, stdout(ctx, root, command))
 end

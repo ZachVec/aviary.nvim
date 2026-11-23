@@ -4,7 +4,7 @@
 flowchart TD
   Hawk["aviary.hawk.show"] --> Path["shared.path.git resolves the worktree"]
   Hawk --> Tab["Tab owns the layout and query flows"]
-  Tab --> |"refresh or switch mode"| Snapshot["Snapshot owns ordered rows and the title"]
+  Tab --> |refresh| Snapshot["Snapshot owns ordered rows and the title"]
   Snapshot --> |"query both revisions"| Git["aviary.hawk.git"]
   Snapshot --> |"metadata followed by changes"| Row["Row describes list content"]
   Tab --> |"draw a range"| Row
@@ -12,7 +12,7 @@ flowchart TD
 ```
 
 The [Hawk entry](../../lua/aviary/hawk/init.lua) resolves the opening worktree
-and constructs the Tab with an initial direct Snapshot. Each Tab owns its
+and constructs the Tab with the default diff Snapshot. Each Tab owns its
 Snapshot, three windows and buffers, and both query cancellations. The Snapshot
 holds the fixed worktree root. [Configuration](../../lua/aviary/hawk/config.lua)
 supplies the actions each Tab binds at construction.
@@ -20,9 +20,10 @@ supplies the actions each Tab binds at construction.
 ## Comparing and previewing
 
 Each bottom buffer line maps to one row of the active
-[Snapshot](../../lua/aviary/hawk/snapshot/init.lua). The metadata rows hold
-the `old` and `new` drafts. The default action captures the selected row before
-opening the prompt. Confirmation updates that row and asks the Tab to redraw it.
+[Snapshot](../../lua/aviary/hawk/snapshot/init.lua). The diff implementation's
+metadata rows hold the `style`, `old` and `new` drafts. The default action
+captures the selected row before opening the prompt or choice list. Confirmation
+updates that row and asks the Tab to redraw it.
 [Rows](../../lua/aviary/hawk/snapshot/row.lua) supply text and extmark
 descriptions. The Tab applies them over the requested line range.
 The `toggle_check` action updates the selected diff row's read state and asks
@@ -30,9 +31,11 @@ the Tab to redraw that line.
 
 On refresh the Snapshot captures the drafts, queries the
 [Git module](../../lua/aviary/hawk/git.lua), and replaces its change rows and
-title after a successful query. The Tab redraws the change range. A Git error
-leaves the last result in place. A mode switch cancels pending list work,
-installs a new Snapshot with the drafts, and redraws the complete list.
+title after a successful query. The `merge-base` style issues one three-dot diff
+from the common ancestor to `new`. The Tab redraws the change range. A Git error
+leaves the last result in place. Changing the `style` row only updates a draft;
+the Tab never installs a new Snapshot while a Review is open. Snapshot switching
+remains reserved in the interface and currently raises.
 
 On a change row, Enter starts a preview using the captured blob IDs. Git starts
 both blob reads before awaiting either. The row writes the results or the

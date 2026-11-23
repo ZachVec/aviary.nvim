@@ -74,6 +74,20 @@ function M.edit_input(lnum, value)
   assert(ok, err)
 end
 
+---@param lnum integer
+---@param value? string
+function M.select_input(lnum, value)
+  vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+  local select = vim.ui.select
+  ---@diagnostic disable-next-line: duplicate-set-field
+  vim.ui.select = function(_, _, confirm)
+    confirm(value)
+  end
+  local ok, err = pcall(M.press, "<CR>")
+  vim.ui.select = select
+  assert(ok, err)
+end
+
 ---@return aviary.hawk.Tab, integer
 function M.open()
   local config = require("aviary.hawk.config")

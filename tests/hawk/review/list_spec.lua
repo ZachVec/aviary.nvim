@@ -15,8 +15,8 @@ describe("Review list", function()
 
   local function open()
     local tab, bottom = h.open()
-    h.edit_input(1, "main")
-    h.edit_input(2, "topic")
+    h.edit_input(2, "main")
+    h.edit_input(3, "topic")
     tab:refresh()
     return tab, bottom
   end
@@ -36,8 +36,8 @@ describe("Review list", function()
     vim.notify = function(message)
       notes[#notes + 1] = message
     end
-    Git.diff = function(ctx, _, old, new)
-      local request = { old = old, new = new, cancelled = false }
+    Git.diff = function(ctx, _, old, new, merge_base)
+      local request = { old = old, new = new, merge_base = merge_base, cancelled = false }
       requests[#requests + 1] = request
       Async({ "hawk-list-spec" }):run(ctx):wait()
       if request.failure then
@@ -78,33 +78,39 @@ describe("Review list", function()
     local tab, bottom = open()
     local item = entry("current")
     ready({ item })
-    assert.are.same({ "main", "topic", "[ ] M current +3 -2" }, h.lines(tab.bufnr))
+    assert.are.same({ "direct", "main", "topic", "[ ] M current +3 -2" }, h.lines(tab.bufnr))
     api.nvim_win_set_cursor(bottom, { 1, 0 })
+    local style, style_line = tab:current()
+    ---@cast style aviary.hawk.snapshot.row.MetaRow
+    assert.are.equal("meta", style.kind)
+    assert.are.equal("choice", style.input.kind)
+    assert.are.equal(1, style_line)
+    api.nvim_win_set_cursor(bottom, { 2, 0 })
     local draft, draft_line = tab:current()
     assert.are.equal("meta", draft.kind)
-    assert.are.equal(1, draft_line)
-    api.nvim_win_set_cursor(bottom, { 3, 0 })
+    assert.are.equal(2, draft_line)
+    api.nvim_win_set_cursor(bottom, { 4, 0 })
     local row, row_line = tab:current()
     assert.are.equal("diff", row.kind)
     assert.are.equal(item, row)
-    assert.are.equal(3, row_line)
+    assert.are.equal(4, row_line)
   end)
 
   it("toggles the selected diff row through its mapping and resets marks on refresh", function()
     local tab, bottom = open()
-    local unread = { "main", "topic", "[ ] M first +3 -2", "[ ] M second +3 -2" }
+    local unread = { "direct", "main", "topic", "[ ] M first +3 -2", "[ ] M second +3 -2" }
     ready({ entry("first"), entry("second") })
 
     api.nvim_win_set_cursor(bottom, { 1, 0 })
     h.press("x")
     assert.are.same(unread, h.lines(tab.bufnr))
 
-    api.nvim_win_set_cursor(bottom, { 3, 7 })
+    api.nvim_win_set_cursor(bottom, { 4, 7 })
     h.press("x")
-    assert.are.same({ "main", "topic", "[x] M first +3 -2", "[ ] M second +3 -2" }, h.lines(tab.bufnr))
-    assert.are.same({ 3, 7 }, api.nvim_win_get_cursor(bottom))
+    assert.are.same({ "direct", "main", "topic", "[x] M first +3 -2", "[ ] M second +3 -2" }, h.lines(tab.bufnr))
+    assert.are.same({ 4, 7 }, api.nvim_win_get_cursor(bottom))
     local ns = api.nvim_get_namespaces()["aviary.hawk.tab.value"]
-    local marks = api.nvim_buf_get_extmarks(tab.bufnr, ns, { 2, 0 }, { 2, 0 }, { details = true })
+    local marks = api.nvim_buf_get_extmarks(tab.bufnr, ns, { 3, 0 }, { 3, 0 }, { details = true })
     assert.are.equal(1, #marks)
     assert.are.equal("DiagnosticOk", marks[1][4].hl_group)
     assert.are.equal(3, marks[1][4].end_col)
@@ -121,14 +127,14 @@ describe("Review list", function()
   it("keeps the cursor on a valid row when the change list shrinks or becomes empty", function()
     local tab, bottom = open()
     ready({ entry("first"), entry("second"), entry(string.rep("x", 60)) })
-    api.nvim_win_set_cursor(bottom, { 5, 40 })
+    api.nvim_win_set_cursor(bottom, { 6, 40 })
     tab:refresh()
     ready({ entry("xy") })
-    assert.are.equal(3, api.nvim_win_get_cursor(bottom)[1])
+    assert.are.equal(4, api.nvim_win_get_cursor(bottom)[1])
     tab:refresh()
     ready({})
-    assert.are.equal(2, api.nvim_win_get_cursor(bottom)[1])
-    assert.are.same({ "main", "topic" }, h.lines(tab.bufnr))
+    assert.are.equal(3, api.nvim_win_get_cursor(bottom)[1])
+    assert.are.same({ "direct", "main", "topic" }, h.lines(tab.bufnr))
   end)
 
   it("cancels superseded queries and keeps the last result when a later query fails", function()
@@ -137,41 +143,41 @@ describe("Review list", function()
     tab:refresh()
     h.flush()
     assert.is_true(requests[1].cancelled)
-    assert.are.same({ "main", "topic" }, h.lines(tab.bufnr))
+    assert.are.same({ "direct", "main", "topic" }, h.lines(tab.bufnr))
     ready({ entry("latest") })
-    api.nvim_win_set_cursor(0, { 3, 0 })
+    api.nvim_win_set_cursor(0, { 4, 0 })
     h.press("x")
     tab:refresh()
     requests[3].deliver(nil, "failed refresh")
     h.flush()
-    assert.are.same({ "main", "topic", "[x] M latest +3 -2" }, h.lines(tab.bufnr))
+    assert.are.same({ "direct", "main", "topic", "[x] M latest +3 -2" }, h.lines(tab.bufnr))
     assert.are.equal(1, #notes)
     assert.matches("failed refresh", notes[1])
   end)
 
   it("publishes submitted revisions when a draft is edited while the query is pending", function()
     local tab = open()
-    h.edit_input(2, "next")
+    h.edit_input(3, "next")
     ready({ entry("submitted") })
-    assert.are.same({ "main", "next", "[ ] M submitted +3 -2" }, h.lines(tab.bufnr))
+    assert.are.same({ "direct", "main", "next", "[ ] M submitted +3 -2" }, h.lines(tab.bufnr))
     assert.matches("main   topic$", vim.fn.bufname(tab.bufnr))
     assert.are.equal("topic", requests[1].new)
   end)
 
-  it("preserves pending work on skipped refresh and cancels it on a mode change", function()
+  it("keeps style edits as drafts and cancels pending work on refresh", function()
     local tab = open()
-    h.edit_input(1, "")
-    h.press("r")
+    h.select_input(1, "merge-base")
     assert.are.equal(1, #requests)
     assert.is_false(requests[1].cancelled)
-    tab:to("direct")
-    assert.is_false(requests[1].cancelled)
-    tab:to("merge")
+    assert.are.same({ "merge-base", "main", "topic" }, h.lines(tab.bufnr))
+
+    h.press("r")
+    assert.are.equal(2, #requests)
     assert.is_true(requests[1].cancelled)
+    assert.is_true(requests[2].merge_base)
     requests[1].deliver({ entry("obsolete") })
-    h.flush()
-    assert.are.same({ " ", "topic" }, h.lines(tab.bufnr))
-    assert.matches("󰓁$", vim.fn.bufname(tab.bufnr))
+    ready({ entry("merged") })
+    assert.are.same({ "merge-base", "main", "topic", "[ ] M merged +3 -2" }, h.lines(tab.bufnr))
   end)
 
   it("clears queued normal mappings on close and preserves mappings in other modes", function()
@@ -207,11 +213,11 @@ describe("Review list", function()
       spans[#spans + 1] = { mark[2], mark[3], mark[4].end_col, mark[4].hl_group }
     end
     assert.are.same({
-      { 2, 0, 3, "Normal" },
-      { 2, 4, 5, "Changed" },
-      { 2, 6, 16, "Directory" },
-      { 2, 17, 19, "Added" },
-      { 2, 20, 22, "Removed" },
+      { 3, 0, 3, "Normal" },
+      { 3, 4, 5, "Changed" },
+      { 3, 6, 16, "Directory" },
+      { 3, 17, 19, "Added" },
+      { 3, 20, 22, "Removed" },
     }, spans)
     assert.are.same(labels, api.nvim_buf_get_extmarks(tab.bufnr, namespaces["aviary.hawk.tab.label"], 0, -1, {}))
   end)
