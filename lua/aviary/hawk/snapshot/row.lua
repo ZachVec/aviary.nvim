@@ -11,11 +11,11 @@ local Git = require("aviary.hawk.git")
 ---@field text string single-line buffer text
 ---@field marks { namespace: integer, column: integer, opts: vim.api.keyset.set_extmark }[] zero-based byte columns
 
----@class aviary.hawk.snapshot.row.Row
+---@class aviary.hawk.snapshot.row.Base
 ---@field kind "meta"|"diff"
 ---@field render fun(self: self, label_ns: integer, value_ns: integer): aviary.hawk.snapshot.row.RenderedRow Describe the row for the Tab using its extmark namespaces.
 
----@class aviary.hawk.snapshot.row.MetaRow: aviary.hawk.snapshot.row.Row
+---@class aviary.hawk.snapshot.row.MetaRow: aviary.hawk.snapshot.row.Base
 ---@field kind "meta"
 ---@field label string
 ---@field private highlights string[]
@@ -30,7 +30,7 @@ MetaRow.__index = MetaRow
 local RevisionRow = setmetatable({}, { __index = MetaRow })
 RevisionRow.__index = RevisionRow
 
----@class aviary.hawk.snapshot.row.DiffRow: aviary.hawk.snapshot.row.Row
+---@class aviary.hawk.snapshot.row.DiffRow: aviary.hawk.snapshot.row.Base
 ---@field kind "diff"
 ---@field root string absolute worktree path
 ---@field path string repository-relative path
@@ -46,6 +46,10 @@ RevisionRow.__index = RevisionRow
 ---@field jump fun(self: self, tab: aviary.hawk.Tab) Preview this row in its open Tab while preserving focus.
 local DiffRow = {}
 DiffRow.__index = DiffRow
+
+---@alias aviary.hawk.snapshot.row.Row
+---| aviary.hawk.snapshot.row.MetaRow
+---| aviary.hawk.snapshot.row.DiffRow
 
 ---@class aviary.hawk.snapshot.row
 ---@field revision fun(label: string, root: string): aviary.hawk.snapshot.row.RevisionRow Create an empty revision draft for the given repository.

@@ -30,11 +30,9 @@ local defaults = {
     hawk = function(tab)
       local row, lnum = tab:current()
       if row.kind == "diff" then
-        ---@cast row aviary.hawk.snapshot.row.DiffRow
         row:jump(tab)
         return
       end
-      ---@cast row aviary.hawk.snapshot.row.MetaRow
       ---@param value? string
       local function confirm(value)
         if value ~= nil then
@@ -58,7 +56,6 @@ local defaults = {
     toggle_check = function(tab)
       local row, lnum = tab:current()
       if row.kind == "diff" then
-        ---@cast row aviary.hawk.snapshot.row.DiffRow
         row:toggle_check()
         tab:render(lnum - 1, lnum)
       end

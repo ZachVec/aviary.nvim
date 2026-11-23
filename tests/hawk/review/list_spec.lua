@@ -81,9 +81,10 @@ describe("Review list", function()
     assert.are.same({ "direct", "main", "topic", "[ ] M current +3 -2" }, h.lines(tab.bufnr))
     api.nvim_win_set_cursor(bottom, { 1, 0 })
     local style, style_line = tab:current()
-    ---@cast style aviary.hawk.snapshot.row.MetaRow
     assert.are.equal("meta", style.kind)
-    assert.are.equal("choice", style.input.kind)
+    if style.kind == "meta" then
+      assert.are.equal("choice", style.input.kind)
+    end
     assert.are.equal(1, style_line)
     api.nvim_win_set_cursor(bottom, { 2, 0 })
     local draft, draft_line = tab:current()

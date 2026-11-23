@@ -56,7 +56,6 @@ for index, value in ipairs({ "main", "topic" }) do
   api.nvim_win_set_cursor(0, { index + 1, 0 })
   local row = tab:current()
   assert(row.kind == "meta")
-  ---@cast row aviary.hawk.snapshot.row.MetaRow
   row:edit(value)
 end
 tab:render(0, -1)
