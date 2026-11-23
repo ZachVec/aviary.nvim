@@ -21,6 +21,7 @@ local defaults = {
     close = { "q" },
     hawk = { "<CR>" },
     refresh = { "r" },
+    toggle_all = { "X" },
     toggle_check = { "x" },
   },
   actions = {
@@ -52,6 +53,22 @@ local defaults = {
     end,
     refresh = function(tab)
       tab:refresh()
+    end,
+    toggle_all = function(tab)
+      local rows, all = {}, true
+      for _, row in tab:changes() do
+        rows[#rows + 1] = row
+        all = all and row.checked
+      end
+      if #rows == 0 then
+        return
+      end
+      for _, row in ipairs(rows) do
+        if row.checked == all then
+          row:toggle_check()
+        end
+      end
+      tab:render(0, -1)
     end,
     toggle_check = function(tab)
       local row, lnum = tab:current()

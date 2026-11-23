@@ -38,6 +38,7 @@ it. The `style` row accepts `direct` or `merge-base`; it starts at `direct`.
 | Enter | Run `hawk` on the current row |
 | `r` | Refresh the list using both revision drafts and the selected style |
 | `x` | Run `toggle_check` on the current change |
+| `X` | Run `toggle_all` on the change list |
 | `q` | Close Review |
 
 The `old` and `new` inputs must have a value for the refresh to run; an empty
@@ -64,8 +65,10 @@ Counts use `10k+` at 10000 lines or more. Long rows follow the window's
 `wrap` setting.
 
 The `toggle_check` action switches a change row between unread `[ ]` (`Normal`)
-and read `[x]` (`DiagnosticOk`). Read marks belong to the current list in each
-Review tab. A successful refresh starts the new list with all rows unread.
+and read `[x]` (`DiagnosticOk`). The `toggle_all` action marks every change read,
+or clears every mark when all changes are already read. Read marks belong to the
+current list in each Review tab. A successful refresh starts the new list with
+all rows unread.
 
 `hawk` on a change loads the selected file into the readonly `old` and `new`
 windows and keeps the focus in the list. Both previews open at the first change
@@ -97,7 +100,7 @@ require("aviary").setup({
   hawk = {
     keymaps = {
       close = { "q" }, hawk = { "<CR>" }, refresh = { "r" },
-      toggle_check = { "x" },
+      toggle_all = { "X" }, toggle_check = { "x" },
     },
     actions = {},
   },
@@ -116,6 +119,7 @@ the prompt opened while that row still belongs to the open Tab.
 | Method | Behavior |
 | --- | --- |
 | `tab:current()` | Return the selected row and its one-based buffer line. A `meta` row exposes `label`, `value` and `input`. A `diff` row exposes `path`, `checked` and the change metadata. |
+| `tab:changes()` | Iterate the current change rows and their one-based buffer lines. Metadata rows are omitted. Rows are borrowed for the iteration. |
 | `row:edit(value)` | Update a metadata row's draft with a single-line string. Follow with `tab:render(lnum - 1, lnum)` to redraw that row. |
 | `row:toggle_check()` | Toggle a diff row's read mark. Follow with `tab:render(lnum - 1, lnum)` to redraw that row. |
 | `row:jump(tab)` | Preview a diff row |

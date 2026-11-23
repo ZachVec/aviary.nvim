@@ -15,6 +15,7 @@ describe("Hawk Review options", function()
     config.setup()
     assert.are.same({ "q" }, config().keymaps.close)
     assert.are.same({ "<CR>" }, config().keymaps.hawk)
+    assert.are.same({ "X" }, config().keymaps.toggle_all)
   end)
 
   it("rejects unknown options and invalid shapes without changing the current config", function()

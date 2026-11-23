@@ -125,6 +125,45 @@ describe("Review list", function()
     assert.are.same(unread, h.lines(tab.bufnr))
   end)
 
+  it("exposes change rows and their buffer lines", function()
+    local tab = open()
+    ready({ entry("first"), entry("second") })
+    local seen = {}
+    for lnum, row in tab:changes() do
+      seen[#seen + 1] = { lnum, row.path }
+    end
+    assert.are.same({ { 4, "first" }, { 5, "second" } }, seen)
+
+    tab:refresh()
+    ready({})
+    for _ in tab:changes() do
+      error("unexpected change row")
+    end
+  end)
+
+  it("toggles all changes through its default mapping", function()
+    local tab, bottom = open()
+    local unread = { "direct", "main", "topic", "[ ] M first +3 -2", "[ ] M second +3 -2" }
+    ready({ entry("first"), entry("second") })
+    api.nvim_win_set_cursor(bottom, { 4, 0 })
+    h.press("x")
+    assert.are.same({ "direct", "main", "topic", "[x] M first +3 -2", "[ ] M second +3 -2" }, h.lines(tab.bufnr))
+
+    h.press("X")
+    assert.are.same({ "direct", "main", "topic", "[x] M first +3 -2", "[x] M second +3 -2" }, h.lines(tab.bufnr))
+
+    h.press("X")
+    assert.are.same(unread, h.lines(tab.bufnr))
+  end)
+
+  it("leaves an empty change list unchanged when toggling all", function()
+    local tab = open()
+    ready({})
+    h.press("X")
+    assert.are.same({ "direct", "main", "topic" }, h.lines(tab.bufnr))
+    assert.are.same({}, notes)
+  end)
+
   it("keeps the cursor on a valid row when the change list shrinks or becomes empty", function()
     local tab, bottom = open()
     ready({ entry("first"), entry("second"), entry(string.rep("x", 60)) })
