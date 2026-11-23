@@ -104,23 +104,27 @@ describe("Review Git object comparisons", function()
     h.commit(dir)
 
     local tab = h.open()
-    h.edit_input(1, "side")
-    h.edit_input(2, "main")
+    h.edit_input(2, "side")
+    h.edit_input(3, "main")
     h.press("r")
     h.wait_for(function()
-      return #h.lines(tab.bufnr) == 4
+      return #h.lines(tab.bufnr) == 5
     end)
-    assert.are.same({ "side", "main", "[ ] A main.txt +1 -0", "[ ] D side.txt +0 -1" }, h.lines(tab.bufnr))
+    assert.are.same({ "direct", "side", "main", "[ ] A main.txt +1 -0", "[ ] D side.txt +0 -1" }, h.lines(tab.bufnr))
 
-    tab:to("merge")
-    assert.are.same({ "side", "main" }, h.lines(tab.bufnr))
+    h.select_input(1, "merge-base")
+    assert.are.same(
+      { "merge-base", "side", "main", "[ ] A main.txt +1 -0", "[ ] D side.txt +0 -1" },
+      h.lines(tab.bufnr)
+    )
     h.write(dir, "stage-only.txt", { "exclude" })
     h.git(dir, { "add", "stage-only.txt" })
     h.press("r")
     h.wait_for(function()
-      return #h.lines(tab.bufnr) == 3
+      return #h.lines(tab.bufnr) == 4
     end)
-    assert.are.same({ "side", "main", "[ ] A main.txt +1 -0" }, h.lines(tab.bufnr))
+    assert.are.same({ "merge-base", "side", "main", "[ ] A main.txt +1 -0" }, h.lines(tab.bufnr))
+    assert.matches("^Review #%d+: side", vim.fn.bufname(tab.bufnr))
   end)
 
   it("retains both rename paths and describes their byte highlight ranges", function()

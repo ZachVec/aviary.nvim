@@ -43,7 +43,7 @@ describe("Hawk Review UI", function()
       return diff(...)
     end
     local tab = h.open()
-    assert.are.same({ " ", " " }, h.lines(tab.bufnr))
+    assert.are.same({ "direct", " ", " " }, h.lines(tab.bufnr))
     assert.is_false(vim.bo[tab.bufnr].modifiable)
     assert.is_false(vim.wo.number)
     assert.is_false(vim.wo.relativenumber)
@@ -55,61 +55,56 @@ describe("Hawk Review UI", function()
     assert.matches("^Review #%d+$", vim.fn.bufname(tab.bufnr))
 
     h.press("r")
-    h.edit_input(1, "HEAD~1")
+    h.edit_input(2, "HEAD~1")
     h.press("r")
-    h.edit_input(2, "HEAD")
+    h.edit_input(3, "HEAD")
     assert.are.equal(0, queries)
-    assert.are.same({ "HEAD~1", "HEAD" }, h.lines(tab.bufnr))
+    assert.are.same({ "direct", "HEAD~1", "HEAD" }, h.lines(tab.bufnr))
 
     h.press("r")
     h.wait_for(function()
-      return api.nvim_buf_line_count(tab.bufnr) == 3
+      return api.nvim_buf_line_count(tab.bufnr) == 4
     end)
     assert.are.equal(1, queries)
-    assert.are.same({ "HEAD~1", "HEAD", "[ ] M a.txt +1 -1" }, h.lines(tab.bufnr))
+    assert.are.same({ "direct", "HEAD~1", "HEAD", "[ ] M a.txt +1 -1" }, h.lines(tab.bufnr))
     assert.matches("HEAD~1", vim.fn.bufname(tab.bufnr))
   end)
 
-  it("switches through custom actions, keeping drafts and waiting for another refresh", function()
-    local queries = 0
+  it("keeps the reserved to interface raising", function()
+    local tab = h.open()
+    assert.has_error(function()
+      tab:to("worktree")
+    end, "aviary.hawk: snapshot switching is not implemented")
+  end)
+
+  it("selects the comparison style through the style row", function()
+    local queries, finished = 0, 0
     Git.diff = function(...)
       queries = queries + 1
-      return diff(...)
+      local entries = diff(...)
+      finished = finished + 1
+      return entries
     end
-    assert(Config.setup({
-      keymaps = { merge = { "<F7>" }, direct = { "<F8>" } },
-      actions = {
-        merge = function(tab)
-          tab:to("merge")
-        end,
-        direct = function(tab)
-          tab:to("direct")
-        end,
-      },
-    }))
     local tab = h.open()
-    assert.are.same({}, vim.fn.maparg("t", "n", false, true))
-    h.edit_input(1, "HEAD~1")
-    h.edit_input(2, "HEAD")
+    h.edit_input(2, "HEAD~1")
+    h.edit_input(3, "HEAD")
     h.press("r")
     h.wait_for(function()
-      return api.nvim_buf_line_count(tab.bufnr) == 3
+      return api.nvim_buf_line_count(tab.bufnr) == 4
     end)
-    local tick = api.nvim_buf_get_changedtick(tab.bufnr)
-    h.press("<F8>")
-    assert.are.equal(tick, api.nvim_buf_get_changedtick(tab.bufnr))
-    h.press("<F7>")
-    assert.are.same({ "HEAD~1", "HEAD" }, h.lines(tab.bufnr))
-    assert.matches("󰓁$", vim.fn.bufname(tab.bufnr))
+    assert.are.same({ "direct", "HEAD~1", "HEAD", "[ ] M a.txt +1 -1" }, h.lines(tab.bufnr))
     assert.are.equal(1, queries)
 
-    h.edit_input(1, "HEAD")
+    h.select_input(1, "merge-base")
+    assert.are.equal(1, queries)
+    assert.are.same({ "merge-base", "HEAD~1", "HEAD", "[ ] M a.txt +1 -1" }, h.lines(tab.bufnr))
+
     h.press("r")
     h.wait_for(function()
-      return vim.fn.bufname(tab.bufnr):find("HEAD", 1, true) ~= nil
+      return finished == 2
     end)
     assert.are.equal(2, queries)
-    assert.are.same({ "HEAD", "HEAD" }, h.lines(tab.bufnr))
+    assert.are.same({ "merge-base", "HEAD~1", "HEAD", "[ ] M a.txt +1 -1" }, h.lines(tab.bufnr))
     assert.are.same({}, notes)
   end)
 
@@ -117,17 +112,17 @@ describe("Hawk Review UI", function()
     local tab = h.open()
     local ns = api.nvim_get_namespaces()["aviary.hawk.tab.label"]
     local marks = api.nvim_buf_get_extmarks(tab.bufnr, ns, 0, -1, { details = true })
-    assert.are.equal("← old: ", marks[1][4].virt_text[1][1])
-    assert.are.equal("→ new: ", marks[3][4].virt_text[1][1])
-    local next_row = api.nvim_buf_get_extmarks(tab.bufnr, ns, { 1, 0 }, { 1, -1 }, {})
+    assert.are.equal("┌ old: ", marks[2][4].virt_text[1][1])
+    assert.are.equal("└ new: ", marks[4][4].virt_text[1][1])
+    local next_row = api.nvim_buf_get_extmarks(tab.bufnr, ns, { 2, 0 }, { 2, -1 }, {})
 
-    h.edit_input(1, " HEAD~1 ")
-    assert.are.same({ " HEAD~1 ", " " }, h.lines(tab.bufnr))
-    h.edit_input(1)
-    assert.are.same({ " HEAD~1 ", " " }, h.lines(tab.bufnr))
-    h.edit_input(1, " \t\r\n")
-    assert.are.same({ " ", " " }, h.lines(tab.bufnr))
-    assert.are.same(next_row, api.nvim_buf_get_extmarks(tab.bufnr, ns, { 1, 0 }, { 1, -1 }, {}))
+    h.edit_input(2, " HEAD~1 ")
+    assert.are.same({ "direct", " HEAD~1 ", " " }, h.lines(tab.bufnr))
+    h.edit_input(2)
+    assert.are.same({ "direct", " HEAD~1 ", " " }, h.lines(tab.bufnr))
+    h.edit_input(2, " \t\r\n")
+    assert.are.same({ "direct", " ", " " }, h.lines(tab.bufnr))
+    assert.are.same(next_row, api.nvim_buf_get_extmarks(tab.bufnr, ns, { 2, 0 }, { 2, -1 }, {}))
     assert.is_false(vim.bo[tab.bufnr].modified)
   end)
 
@@ -145,21 +140,21 @@ describe("Hawk Review UI", function()
 
   it("leaves the previous result and preview available on bad input and can retry", function()
     local tab = h.open()
-    h.edit_input(1, "HEAD~1")
-    h.edit_input(2, "HEAD")
+    h.edit_input(2, "HEAD~1")
+    h.edit_input(3, "HEAD")
     h.press("r")
     h.wait_for(function()
-      return api.nvim_buf_line_count(tab.bufnr) == 3
+      return api.nvim_buf_line_count(tab.bufnr) == 4
     end)
     local title = vim.fn.bufname(tab.bufnr)
-    api.nvim_win_set_cursor(0, { 3, 0 })
+    api.nvim_win_set_cursor(0, { 4, 0 })
     h.press("<CR>")
     h.wait_for(function()
       return h.lines(tab.new_buf)[1] == "new"
     end)
     for _, value in ipairs({ "::index", "::worktree" }) do
       local previous = #notes
-      h.edit_input(2, value)
+      h.edit_input(3, value)
       h.press("r")
       h.wait_for(function()
         return #notes > previous
@@ -167,24 +162,24 @@ describe("Hawk Review UI", function()
       assert.are.equal(vim.log.levels.ERROR, notes[#notes].level)
       assert.is_truthy(notes[#notes].message:find(value, 1, true))
       assert.is_nil(notes[#notes].message:find("stack traceback", 1, true))
-      assert.are.same({ "HEAD~1", value, "[ ] M a.txt +1 -1" }, h.lines(tab.bufnr))
+      assert.are.same({ "direct", "HEAD~1", value, "[ ] M a.txt +1 -1" }, h.lines(tab.bufnr))
       assert.are.equal(title, vim.fn.bufname(tab.bufnr))
       assert.are.same({ "new" }, h.lines(tab.new_buf))
     end
 
-    h.edit_input(2, "HEAD~1")
+    h.edit_input(3, "HEAD~1")
     h.press("r")
     h.wait_for(function()
-      return api.nvim_buf_line_count(tab.bufnr) == 2
+      return api.nvim_buf_line_count(tab.bufnr) == 3
     end)
-    assert.are.same({ "HEAD~1", "HEAD~1" }, h.lines(tab.bufnr))
+    assert.are.same({ "direct", "HEAD~1", "HEAD~1" }, h.lines(tab.bufnr))
     assert.are.same({ "new" }, h.lines(tab.new_buf))
   end)
 
   it("keeps simultaneous reviews pinned across global cwd changes", function()
     local first, first_win = h.open()
-    h.edit_input(1, "HEAD~1")
-    h.edit_input(2, "HEAD")
+    h.edit_input(2, "HEAD~1")
+    h.edit_input(3, "HEAD")
 
     other = h.repo()
     h.write(other, "b.txt", { "B" })
@@ -193,35 +188,35 @@ describe("Hawk Review UI", function()
     h.commit(other)
     vim.cmd.cd(other)
     local second = h.open()
-    h.edit_input(1, "HEAD~1")
-    h.edit_input(2, "HEAD")
+    h.edit_input(2, "HEAD~1")
+    h.edit_input(3, "HEAD")
     h.press("r")
     h.wait_for(function()
-      return api.nvim_buf_line_count(second.bufnr) == 3
+      return api.nvim_buf_line_count(second.bufnr) == 4
     end)
-    assert.are.same({ "HEAD~1", "HEAD", "[ ] M b.txt +1 -1" }, h.lines(second.bufnr))
-    assert.are.same({ "HEAD~1", "HEAD" }, h.lines(first.bufnr))
+    assert.are.same({ "direct", "HEAD~1", "HEAD", "[ ] M b.txt +1 -1" }, h.lines(second.bufnr))
+    assert.are.same({ "direct", "HEAD~1", "HEAD" }, h.lines(first.bufnr))
 
     api.nvim_set_current_win(first_win)
     h.press("r")
     h.wait_for(function()
-      return api.nvim_buf_line_count(first.bufnr) == 3
+      return api.nvim_buf_line_count(first.bufnr) == 4
     end)
-    assert.are.same({ "HEAD~1", "HEAD", "[ ] M a.txt +1 -1" }, h.lines(first.bufnr))
-    assert.are.same({ "HEAD~1", "HEAD", "[ ] M b.txt +1 -1" }, h.lines(second.bufnr))
+    assert.are.same({ "direct", "HEAD~1", "HEAD", "[ ] M a.txt +1 -1" }, h.lines(first.bufnr))
+    assert.are.same({ "direct", "HEAD~1", "HEAD", "[ ] M b.txt +1 -1" }, h.lines(second.bufnr))
   end)
 
   it("keeps preview names distinct and stable when review tabs are renumbered", function()
     local reviews, names = {}, {}
     for index = 1, 2 do
       local tab, bottom = h.open()
-      h.edit_input(1, "HEAD~1")
-      h.edit_input(2, "HEAD")
+      h.edit_input(2, "HEAD~1")
+      h.edit_input(3, "HEAD")
       h.press("r")
       h.wait_for(function()
-        return api.nvim_buf_line_count(tab.bufnr) == 3
+        return api.nvim_buf_line_count(tab.bufnr) == 4
       end)
-      api.nvim_win_set_cursor(bottom, { 3, 0 })
+      api.nvim_win_set_cursor(bottom, { 4, 0 })
       h.press("<CR>")
       h.wait_for(function()
         return h.lines(tab.new_buf)[1] == "new"

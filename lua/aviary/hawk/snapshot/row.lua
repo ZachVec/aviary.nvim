@@ -49,6 +49,7 @@ DiffRow.__index = DiffRow
 
 ---@class aviary.hawk.snapshot.row
 ---@field revision fun(label: string, root: string): aviary.hawk.snapshot.row.RevisionRow Create an empty revision draft for the given repository.
+---@field choice fun(label: string, choices: string[], value: string): aviary.hawk.snapshot.row.MetaRow Create a choice draft with the given current value.
 ---@field diff fun(entry: aviary.hawk.git.Entry): aviary.hawk.snapshot.row.DiffRow Take ownership of one Git entry and convert it into a change row in place.
 local M = {}
 
@@ -72,6 +73,17 @@ function M.revision(label, root)
     value = "",
     input = { kind = "revision", root = root },
   }, RevisionRow)
+end
+
+function M.choice(label, choices, value)
+  return setmetatable({
+    kind = "meta",
+    label = label,
+    highlights = LABEL_HIGHLIGHTS,
+    placeholder = table.concat(choices, " or "),
+    value = value,
+    input = { kind = "choice", choices = choices },
+  }, MetaRow)
 end
 
 function M.diff(entry)

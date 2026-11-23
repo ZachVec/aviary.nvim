@@ -22,6 +22,20 @@ local function with_jobs(work)
 end
 
 describe("Review Git version queries", function()
+  it("builds a three-dot revision for merge-base comparisons", function()
+    with_jobs(function(jobs)
+      local result
+      Async.run(function(ctx)
+        result = Git.diff(ctx, "/repository", "main", "topic", true)
+      end, error)
+      assert.are.equal(1, #jobs)
+      assert.are.equal("main...topic", jobs[1].argv[#jobs[1].argv - 1])
+      assert.are.equal("--", jobs[1].argv[#jobs[1].argv])
+      jobs[1].opts.on_exit(1, 0)
+      assert.are.same({}, result)
+    end)
+  end)
+
   it("starts both blob commands before waiting and returns structured results after out-of-order exits", function()
     with_jobs(function(jobs, stopped)
       local result

@@ -21,7 +21,7 @@ local M = {}
 ---@field current fun(self: self): aviary.hawk.snapshot.row.Row, integer Borrow the selected row and its one-based buffer line from an open Tab.
 ---@field refresh fun(self: self) Refresh the current comparison using its drafts and redraw the change list.
 ---@field render fun(self: self, first: integer, last: integer) Draw the current snapshot over a zero-based half-open line range. Use -1 for the end of the list.
----@field to fun(self: self, style: string) Switch to direct or merge, converting compatible drafts and clearing the change list. Re-selecting the current style has no effect.
+---@field to fun(self: self, mode: string) Reserved for future snapshot switching; currently raises a "not implemented" error.
 ---@field bufnr integer owned list buffer
 ---@field private snapshot aviary.hawk.snapshot.Snapshot
 ---@field tabpage integer stable Neovim tabpage handle
@@ -98,20 +98,8 @@ function Tab:refresh()
   end
 end
 
-function Tab:to(style)
-  local current = self.snapshot
-  local snapshot = current:to(style)
-  if snapshot == current then
-    return
-  end
-  local cancel = self.cancel_list
-  if cancel then
-    self.cancel_list = nil
-    cancel()
-  end
-  self.snapshot = snapshot
-  self:render(0, -1)
-  vim.api.nvim_buf_set_name(self.bufnr, ("Review #%d: %s"):format(self.tabpage, snapshot.title))
+function Tab:to(mode)
+  self.snapshot:to(mode)
 end
 
 function Tab:close()
@@ -197,7 +185,7 @@ function M.show()
     end
 
     local bufnr = bufnrs[bot]
-    local snapshot = Snapshot.new(root, "direct")
+    local snapshot = Snapshot.new(root)
     local group = txn:acquire(Resources.augroup("aviary.hawk.tab." .. bufnr))
     local self = setmetatable({
       snapshot = snapshot,

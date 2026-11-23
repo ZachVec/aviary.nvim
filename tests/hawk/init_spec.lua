@@ -28,7 +28,7 @@ describe("aviary.hawk", function()
     assert.are_not.equal(first, vim.api.nvim_get_current_tabpage())
     assert.is_true(vim.api.nvim_tabpage_is_valid(first))
     assert.are.equal("aviary_hawk", vim.bo.filetype)
-    assert.are.same({ " ", " " }, h.lines(vim.api.nvim_get_current_buf()))
+    assert.are.same({ "direct", " ", " " }, h.lines(vim.api.nvim_get_current_buf()))
   end)
 
   it("propagates creation failures and permits another call", function()

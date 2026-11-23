@@ -15,6 +15,20 @@ Metadata rows hold drafts. A successful Git query updates the comparison and
 its title, so users can correct an invalid draft while seeing the last successful
 result.
 
+## Direct and merge-base share one Snapshot implementation
+
+Both styles compare two revisions and differ only in whether the left side is
+`old` or their common ancestor. One diff Snapshot with a style row avoids
+duplicate construction and instance switching while the interface and factory
+still allow other snapshot modes later.
+
+## Snapshot switching is reserved
+
+The `to` interface remains for future snapshot modes, but `new` currently
+constructs only the default diff Snapshot and `to` raises. Styles change through
+their metadata row and the next refresh, so no second switching path exists until
+another mode needs one.
+
 ## Construction and closure have separate scopes
 
 Synchronous construction acquires the full layout and rolls it back on failure.
