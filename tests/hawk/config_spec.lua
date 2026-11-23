@@ -15,6 +15,7 @@ describe("Hawk Review options", function()
     config.setup()
     assert.are.same({ "q" }, config().keymaps.close)
     assert.are.same({ "<CR>" }, config().keymaps.hawk)
+    assert.are.same({ "X" }, config().keymaps.toggle_all)
   end)
 
   it("rejects unknown options and invalid shapes without changing the current config", function()
@@ -75,6 +76,7 @@ describe("Hawk Review options", function()
       local confirm, edited, range
       local row = {
         kind = "meta",
+        value = kind == "choice" and "one" or "HEAD",
         input = kind == "choice" and { kind = "choice", choices = choices } or { kind = "revision", root = "/repo" },
         edit = function(_, value)
           edited = value
@@ -94,14 +96,15 @@ describe("Hawk Review options", function()
       ---@diagnostic disable-next-line: duplicate-set-field
       vim.ui.input = function(opts, callback)
         assert.are.equal("revision", kind)
-        assert.are.same({}, opts)
+        assert.are.same({ default = "HEAD" }, opts)
         confirm = callback
       end
       ---@diagnostic disable-next-line: duplicate-set-field
       vim.ui.select = function(items, opts, callback)
         assert.are.equal("choice", kind)
         assert.are.same(choices, items)
-        assert.are.same({}, opts)
+        assert.are.equal("one [current]", opts.format_item("one"))
+        assert.are.equal("two", opts.format_item("two"))
         confirm = callback
       end
       local ok, err = pcall(function()

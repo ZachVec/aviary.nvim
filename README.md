@@ -74,8 +74,8 @@ require("aviary").hawk.show()
 Press Enter to edit the `old` and `new` revisions or select the comparison
 style (`direct` or `merge-base`), then press `r` to populate the list. Enter on
 a change previews it in Neovim diff. Press `x` on a change to toggle its read
-mark. Each tab keeps its own worktree and results. See the
-[Hawk manual](./docs/hawk.md#review) for details.
+mark, or `X` to toggle all read marks. Each tab keeps its own worktree and
+results. See the [Hawk manual](./docs/hawk.md#review) for details.
 
 [Pigeon actions](./docs/pigeon.md#actions) run from the Terminal and receive a
 lazy current-Agent getter and the captured reference. Bind the built-in `prompt`
@@ -115,6 +115,7 @@ require("aviary").setup({
   hawk = {
     keymaps = {
       close = { "q" }, hawk = { "<CR>" }, refresh = { "r" },
+      toggle_all = { "X" }, toggle_check = { "x" },
     },
     actions = {}, -- handlers receive the owning Review Tab
   },

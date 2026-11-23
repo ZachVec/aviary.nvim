@@ -46,3 +46,12 @@ inspect the represented versions.
 
 A change row keeps the blob IDs captured by the comparison. Preview continues
 to show the selected versions when Git refs move.
+
+## Read marks follow the captured change
+
+A refresh rebuilds change rows, so read marks are matched by the captured paths,
+status, kind and blob IDs rather than by list position. Unchanged entries keep
+their mark; changed or new entries start unread. Resetting every refresh would
+lose review progress, while matching only by path would mark unreviewed content
+as read. Mode changes are not part of the identity because the list does not
+display them.

@@ -19,6 +19,7 @@ local M = {}
 ---@class aviary.hawk.Tab
 ---@field close fun(self: self) End an open Review. Stop pending reads immediately and schedule native resource cleanup.
 ---@field current fun(self: self): aviary.hawk.snapshot.row.Row, integer Borrow the selected row and its one-based buffer line from an open Tab.
+---@field changes fun(self: self): fun(): integer?, aviary.hawk.snapshot.row.DiffRow? Borrow the current change rows and their one-based buffer lines for one iteration. Metadata rows are omitted and the row array is not exposed.
 ---@field refresh fun(self: self) Refresh the current comparison using its drafts and redraw the change list.
 ---@field render fun(self: self, first: integer, last: integer) Draw the current snapshot over a zero-based half-open line range. Use -1 for the end of the list.
 ---@field to fun(self: self, mode: string) Reserved for future snapshot switching; currently raises a "not implemented" error.
@@ -42,6 +43,23 @@ local NS_VALUE = vim.api.nvim_create_namespace("aviary.hawk.tab.value")
 function Tab:current()
   local lnum = vim.api.nvim_win_get_cursor(self.winnr)[1]
   return self.snapshot.rows[lnum], lnum
+end
+
+---@return fun(): integer?, aviary.hawk.snapshot.row.DiffRow?
+function Tab:changes()
+  local rows, index = self.snapshot.rows, 0
+  return function()
+    while true do
+      index = index + 1
+      local row = rows[index]
+      if not row then
+        return
+      end
+      if row.kind == "diff" then
+        return index, row
+      end
+    end
+  end
 end
 
 function Tab:render(first, last)

@@ -11,11 +11,11 @@ local Git = require("aviary.hawk.git")
 ---@field text string single-line buffer text
 ---@field marks { namespace: integer, column: integer, opts: vim.api.keyset.set_extmark }[] zero-based byte columns
 
----@class aviary.hawk.snapshot.row.Row
+---@class aviary.hawk.snapshot.row.Base
 ---@field kind "meta"|"diff"
 ---@field render fun(self: self, label_ns: integer, value_ns: integer): aviary.hawk.snapshot.row.RenderedRow Describe the row for the Tab using its extmark namespaces.
 
----@class aviary.hawk.snapshot.row.MetaRow: aviary.hawk.snapshot.row.Row
+---@class aviary.hawk.snapshot.row.MetaRow: aviary.hawk.snapshot.row.Base
 ---@field kind "meta"
 ---@field label string
 ---@field private highlights string[]
@@ -30,7 +30,7 @@ MetaRow.__index = MetaRow
 local RevisionRow = setmetatable({}, { __index = MetaRow })
 RevisionRow.__index = RevisionRow
 
----@class aviary.hawk.snapshot.row.DiffRow: aviary.hawk.snapshot.row.Row
+---@class aviary.hawk.snapshot.row.DiffRow: aviary.hawk.snapshot.row.Base
 ---@field kind "diff"
 ---@field root string absolute worktree path
 ---@field path string repository-relative path
@@ -42,10 +42,15 @@ RevisionRow.__index = RevisionRow
 ---@field checked boolean whether this row has been marked read in the current result
 ---@field private old_blob? string captured object ID
 ---@field private new_blob? string captured object ID
+---@field identity fun(self: self): string Stable identity for read-mark preservation across refreshes.
 ---@field toggle_check fun(self: self) Switch the read mark. The caller redraws the changed row through its Tab.
 ---@field jump fun(self: self, tab: aviary.hawk.Tab) Preview this row in its open Tab while preserving focus.
 local DiffRow = {}
 DiffRow.__index = DiffRow
+
+---@alias aviary.hawk.snapshot.row.Row
+---| aviary.hawk.snapshot.row.MetaRow
+---| aviary.hawk.snapshot.row.DiffRow
 
 ---@class aviary.hawk.snapshot.row
 ---@field revision fun(label: string, root: string): aviary.hawk.snapshot.row.RevisionRow Create an empty revision draft for the given repository.
@@ -154,6 +159,20 @@ function DiffRow:render(_, value_ns)
   }
 end
 
+--- Return a stable identity for the captured change. Refreshes carry read
+--- marks for equal identities.
+---@return string
+function DiffRow:identity()
+  return table.concat({
+    self.path,
+    self.old_path or "",
+    self.status,
+    self.file_kind,
+    self.old_blob or "",
+    self.new_blob or "",
+  }, "\0")
+end
+
 function DiffRow:toggle_check()
   self.checked = not self.checked
 end
@@ -204,6 +223,11 @@ function DiffRow:jump(tab)
     vim.api.nvim_win_call(tab.new_win, function()
       vim.cmd("diffupdate")
     end)
+    for _, win in ipairs({ tab.old_win, tab.new_win }) do
+      vim.api.nvim_win_call(win, function()
+        vim.cmd("silent! normal! ]c")
+      end)
+    end
   end)
 end
 

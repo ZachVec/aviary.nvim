@@ -23,9 +23,10 @@ The bottom buffer starts with a `style` row set to `direct`, followed by empty
 
 The `hawk` action opens `vim.ui.input()` on a revision row, `vim.ui.select()` on
 the `style` row, and opens a preview on a change row. Enter invokes this action
-by default. Confirming applies the value to the row that opened the prompt. An
-empty or whitespace-only revision input clears the value. Cancelling preserves
-the draft.
+by default. The revision input starts with the current draft, and the style
+selector marks the current value as `[current]`. Confirming applies the value to
+the row that opened the prompt. An empty or whitespace-only revision input clears
+the value. Cancelling preserves the draft.
 
 Each revision row accepts a Git revision such as a branch, tag, commit SHA or
 `HEAD~2`. Git resolves both revisions on each refresh, including `HEAD` in a
@@ -37,6 +38,7 @@ it. The `style` row accepts `direct` or `merge-base`; it starts at `direct`.
 | Enter | Run `hawk` on the current row |
 | `r` | Refresh the list using both revision drafts and the selected style |
 | `x` | Run `toggle_check` on the current change |
+| `X` | Run `toggle_all` on the change list |
 | `q` | Close Review |
 
 The `old` and `new` inputs must have a value for the refresh to run; an empty
@@ -63,14 +65,18 @@ Counts use `10k+` at 10000 lines or more. Long rows follow the window's
 `wrap` setting.
 
 The `toggle_check` action switches a change row between unread `[ ]` (`Normal`)
-and read `[x]` (`DiagnosticOk`). Read marks belong to the current list in each
-Review tab. A successful refresh starts the new list with all rows unread.
+and read `[x]` (`DiagnosticOk`). The `toggle_all` action marks every change read,
+or clears every mark when all changes are already read. Read marks belong to the
+current list in each Review tab. A successful refresh keeps the mark for entries
+whose paths, status and captured versions are unchanged; new or changed entries
+start unread. The first refresh starts every entry unread.
 
 `hawk` on a change loads the selected file into the readonly `old` and `new`
-windows and keeps the focus in the list. Both previews start at the top of the
-file and use the blobs captured at refresh. Refresh leaves the displayed
-previews in place. Binary and submodule entries show a description in each
-pane. Selecting another item or closing the tab cancels pending preview reads.
+windows and keeps the focus in the list. Both previews open at the first change
+and use the blobs captured at refresh. `]c` and `[c` move between changes in
+either preview. Refresh leaves the displayed previews in place. Binary and
+submodule entries show a description in each pane. Selecting another item or
+closing the tab cancels pending preview reads.
 
 Preview buffer names use the tab ID and side, as in `2:old/lua/main.lua` and
 `2:new/lua/main.lua`. Renames use the original path on the left and the new path
@@ -95,7 +101,7 @@ require("aviary").setup({
   hawk = {
     keymaps = {
       close = { "q" }, hawk = { "<CR>" }, refresh = { "r" },
-      toggle_check = { "x" },
+      toggle_all = { "X" }, toggle_check = { "x" },
     },
     actions = {},
   },
@@ -114,6 +120,7 @@ the prompt opened while that row still belongs to the open Tab.
 | Method | Behavior |
 | --- | --- |
 | `tab:current()` | Return the selected row and its one-based buffer line. A `meta` row exposes `label`, `value` and `input`. A `diff` row exposes `path`, `checked` and the change metadata. |
+| `tab:changes()` | Iterate the current change rows and their one-based buffer lines. Metadata rows are omitted. Rows are borrowed for the iteration. |
 | `row:edit(value)` | Update a metadata row's draft with a single-line string. Follow with `tab:render(lnum - 1, lnum)` to redraw that row. |
 | `row:toggle_check()` | Toggle a diff row's read mark. Follow with `tab:render(lnum - 1, lnum)` to redraw that row. |
 | `row:jump(tab)` | Preview a diff row |
@@ -142,6 +149,45 @@ require("aviary").setup({
   },
 })
 ```
+
+### Revision picker
+
+The default action accepts any Git revision. Bind an additional action to pick a
+branch or tag with your picker; the input remains available for expressions such
+as `HEAD~2`. The action only acts on revision rows.
+
+```lua
+require("aviary").setup({
+  hawk = {
+    keymaps = {
+      pick_revision = { "<leader>hr" },
+    },
+    actions = {
+      pick_revision = function(tab)
+        local row, lnum = tab:current()
+        if row.kind ~= "meta" then
+          return
+        end
+        if row.input.kind ~= "revision" then
+          return
+        end
+        local refs = vim.fn.systemlist({
+          "git", "-C", row.input.root, "for-each-ref",
+          "--format=%(refname:short)", "refs/heads", "refs/remotes", "refs/tags",
+        })
+        vim.ui.select(refs, { prompt = "Revision:" }, function(value)
+          if value then
+            row:edit(value)
+            tab:render(lnum - 1, lnum)
+          end
+        end)
+      end,
+    },
+  },
+})
+```
+
+Replace `vim.ui.select` with your picker's selection function when you use one.
 
 Full contracts live in [Hawk and Tab](../lua/aviary/hawk/init.lua)
 and [Row](../lua/aviary/hawk/snapshot/row.lua).
