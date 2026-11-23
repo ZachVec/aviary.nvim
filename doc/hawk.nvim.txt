@@ -29,38 +29,50 @@ leaves the current tab in place.
 ==============================================================================
 1. Review                                                   *hawk.nvim-review*
 
-The bottom buffer starts with empty `old` and `new` inputs, followed by the
-change list. The initial mode is direct.
+The bottom buffer starts with a `style` row set to `direct`, followed by empty
+`old` and `new` inputs and the change list.
 
-The `hawk` action opens `vim.ui.input()` on an input row and opens a preview on
-a change row. Enter invokes this action by default. Confirming applies the
-value to the row that opened the prompt. An empty or whitespace-only input
-clears the value. Cancelling preserves the draft.
+The `hawk` action opens `vim.ui.input()` on a revision row, `vim.ui.select()`
+on the `style` row, and opens a preview on a change row. Enter invokes this
+action by default. Confirming applies the value to the row that opened the
+prompt. An empty or whitespace-only revision input clears the value. Cancelling
+preserves the draft.
 
-Each side accepts a Git revision such as a branch, tag, commit SHA or `HEAD~2`.
-Git resolves both revisions on each refresh, including `HEAD` in a detached
-worktree. An unborn `HEAD` causes a Git error when the comparison uses it.
+Each revision row accepts a Git revision such as a branch, tag, commit SHA or
+`HEAD~2`. Git resolves both revisions on each refresh, including `HEAD` in a
+detached worktree. An unborn `HEAD` causes a Git error when the comparison uses
+it. The `style` row accepts `direct` or `merge-base`; it starts at `direct`.
 
-  Key     Action
-  ------- ------------------------------------------
-  Enter   Run hawk on the current row
-  r       Refresh the list using both input values
-  x       Run toggle_check on the current change
-  q       Close Review
-Both inputs must have a value for the refresh to run. Edits, repository changes
-and moving between tabs leave the list as shown until the next manual refresh.
-A failed Git query displays Git’s diagnostic and leaves the drafts, last list
-and previews available. Fix the draft and press `r` again.
+  -----------------------------------------------------------------------
+  Key                                 Action
+  ----------------------------------- -----------------------------------
+  Enter                               Run hawk on the current row
 
-Direct mode compares `old` with `new`. Merge-base mode compares their common
-ancestor with `new`. For example, `main → HEAD` in merge-base mode shows
-changes from the branch’s fork point. Unrelated histories report a Git error.
-Switching modes keeps both drafts and clears the list. Press `r` to run the new
-comparison. The configuration example below adds mappings for both modes.
+  r                                   Refresh the list using both
+                                      revision drafts and the selected
+                                      style
+
+  x                                   Run toggle_check on the current
+                                      change
+
+  q                                   Close Review
+  -----------------------------------------------------------------------
+The `old` and `new` inputs must have a value for the refresh to run; an empty
+`style` also skips the refresh. Edits, repository changes and moving between
+tabs leave the list as shown until the next manual refresh. A failed Git query
+displays Git’s diagnostic and leaves the drafts, last list and previews
+available. Fix the draft and press `r` again.
+
+The `direct` style compares `old` with `new` (`git diff old new`). The
+`merge-base` style compares their common ancestor with `new` (`git diff
+old...new`). For example, `main → HEAD` in `merge-base` style shows changes
+from the branch’s fork point. Unrelated histories report a Git error.
+Changing the `style` row leaves both revision drafts, the list and the title in
+place. Press `r` to run the comparison with the selected style.
 
 The initial list title is `Review #{id}`. After a successful comparison it
-includes the mode, `old` and `new`. The mode is  for direct and 󰓁 for
-merge-base. Commit hashes in titles are abbreviated to seven characters.
+includes `old` and `new`. The `style` row shows a fixed icon before its label.
+Commit hashes in titles are abbreviated to seven characters.
 
 Change rows display repository-relative paths in order. Each row shows a read
 mark, status, full path and added/deleted line counts, such as `[ ] M
@@ -146,28 +158,25 @@ the prompt opened while that row still belongs to the open Tab.
                                       of the list.
 
   tab:refresh()                       Refresh the comparison using both
-                                      inputs
+                                      revision drafts and the selected
+                                      style
 
   tab:close()                         Close the Review
 
-  tab:to(style)                       Switch to "direct" or "merge".
-                                      Selecting the current mode has no
-                                      effect.
+  tab:to(mode)                        Reserved for future snapshot
+                                      switching. Currently raises a
+                                      not implemented error.
   -----------------------------------------------------------------------
-For example, bind each comparison mode and add an action that shows the
-selected path.
+The `style` row is a metadata row with the choices `direct` and `merge-base`.
+For example, add an action that shows the selected path.
 
 >lua
     require("aviary").setup({
       hawk = {
         keymaps = {
-          direct = { "<leader>hd" },
-          merge = { "<leader>hm" },
           show_path = { "<leader>hp" },
         },
         actions = {
-          direct = function(tab) tab:to("direct") end,
-          merge = function(tab) tab:to("merge") end,
           show_path = function(tab)
             local row = tab:current()
             if row.kind == "diff" then
@@ -186,7 +195,9 @@ The former `common` and `review` configuration sections are replaced by
 `hawk.keymaps` and `hawk.actions`. Feature names and `select_feature` are
 removed; use `aviary.hawk.show()` without arguments, replacing the root
 `review()` action. The input fields replace the old version picker and its `b`,
-`B`, `f` and `F` bindings.
+`B`, `f` and `F` bindings. The `style` row replaces the old `t` toggle; select
+it with Enter and press `r`. The former `merge` style value is now
+`merge-base`. `tab:to` is reserved and raises.
 
 There is no custom highlight configuration. The former comments feature and
 `hawk.comments` options have been removed.
