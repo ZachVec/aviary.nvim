@@ -67,8 +67,9 @@ Counts use `10k+` at 10000 lines or more. Long rows follow the window's
 The `toggle_check` action switches a change row between unread `[ ]` (`Normal`)
 and read `[x]` (`DiagnosticOk`). The `toggle_all` action marks every change read,
 or clears every mark when all changes are already read. Read marks belong to the
-current list in each Review tab. A successful refresh starts the new list with
-all rows unread.
+current list in each Review tab. A successful refresh keeps the mark for entries
+whose paths, status and captured versions are unchanged; new or changed entries
+start unread. The first refresh starts every entry unread.
 
 `hawk` on a change loads the selected file into the readonly `old` and `new`
 windows and keeps the focus in the list. Both previews open at the first change

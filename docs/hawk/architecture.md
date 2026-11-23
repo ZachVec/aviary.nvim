@@ -31,7 +31,9 @@ the Tab to redraw that line.
 
 On refresh the Snapshot captures the drafts, queries the
 [Git module](../../lua/aviary/hawk/git.lua), and replaces its change rows and
-title after a successful query. The `merge-base` style issues one three-dot diff
+title after a successful query. Read marks survive the replacement for entries
+whose captured identity is unchanged; changed and new entries start unread. The
+`merge-base` style issues one three-dot diff
 from the common ancestor to `new`. The Tab redraws the change range. A Git error
 leaves the last result in place. Changing the `style` row only updates a draft;
 the Tab never installs a new Snapshot while a Review is open. Snapshot switching

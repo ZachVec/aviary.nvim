@@ -42,6 +42,7 @@ RevisionRow.__index = RevisionRow
 ---@field checked boolean whether this row has been marked read in the current result
 ---@field private old_blob? string captured object ID
 ---@field private new_blob? string captured object ID
+---@field identity fun(self: self): string Stable identity for read-mark preservation across refreshes.
 ---@field toggle_check fun(self: self) Switch the read mark. The caller redraws the changed row through its Tab.
 ---@field jump fun(self: self, tab: aviary.hawk.Tab) Preview this row in its open Tab while preserving focus.
 local DiffRow = {}
@@ -156,6 +157,20 @@ function DiffRow:render(_, value_ns)
       { namespace = value_ns, column = added_end + 1, opts = { end_col = #text, hl_group = "Removed" } },
     },
   }
+end
+
+--- Return a stable identity for the captured change. Refreshes carry read
+--- marks for equal identities.
+---@return string
+function DiffRow:identity()
+  return table.concat({
+    self.path,
+    self.old_path or "",
+    self.status,
+    self.file_kind,
+    self.old_blob or "",
+    self.new_blob or "",
+  }, "\0")
 end
 
 function DiffRow:toggle_check()

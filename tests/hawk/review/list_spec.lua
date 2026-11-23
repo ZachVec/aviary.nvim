@@ -9,8 +9,20 @@ local h = require("hawk.helpers")
 describe("Review list", function()
   local source, cwd, dir, requests, notes, read, notify, jobstart, jobstop
 
-  local function entry(path)
-    return { root = dir, path = path, status = "M", kind = "text", added = 3, removed = 2 }
+  ---@param path string
+  ---@param old_blob? string
+  ---@param new_blob? string
+  local function entry(path, old_blob, new_blob)
+    return {
+      root = dir,
+      path = path,
+      status = "M",
+      kind = "text",
+      added = 3,
+      removed = 2,
+      old_blob = old_blob,
+      new_blob = new_blob,
+    }
   end
 
   local function open()
@@ -97,7 +109,7 @@ describe("Review list", function()
     assert.are.equal(4, row_line)
   end)
 
-  it("toggles the selected diff row through its mapping and resets marks on refresh", function()
+  it("toggles the selected diff row through its mapping and keeps marks for unchanged entries on refresh", function()
     local tab, bottom = open()
     local unread = { "direct", "main", "topic", "[ ] M first +3 -2", "[ ] M second +3 -2" }
     ready({ entry("first"), entry("second") })
@@ -122,7 +134,58 @@ describe("Review list", function()
     h.press("x")
     tab:refresh()
     ready({ entry("first"), entry("second") })
-    assert.are.same(unread, h.lines(tab.bufnr))
+    assert.are.same({ "direct", "main", "topic", "[x] M first +3 -2", "[ ] M second +3 -2" }, h.lines(tab.bufnr))
+  end)
+
+  it("keeps read marks for unchanged entries across refresh and reorder", function()
+    local tab, bottom = open()
+    ready({ entry("first", "a1", "b1"), entry("second", "a2", "b2") })
+    api.nvim_win_set_cursor(bottom, { 5, 0 })
+    h.press("x")
+    assert.are.same({ "direct", "main", "topic", "[ ] M first +3 -2", "[x] M second +3 -2" }, h.lines(tab.bufnr))
+
+    tab:refresh()
+    ready({ entry("second", "a2", "b2"), entry("first", "a1", "b1") })
+    assert.are.same({ "direct", "main", "topic", "[x] M second +3 -2", "[ ] M first +3 -2" }, h.lines(tab.bufnr))
+  end)
+
+  it("resets read marks for changed and new entries", function()
+    local tab, bottom = open()
+    ready({ entry("first", "a1", "b1"), entry("second", "a2", "b2") })
+    api.nvim_win_set_cursor(bottom, { 4, 0 })
+    h.press("x")
+    api.nvim_win_set_cursor(bottom, { 5, 0 })
+    h.press("x")
+    assert.are.same({ "direct", "main", "topic", "[x] M first +3 -2", "[x] M second +3 -2" }, h.lines(tab.bufnr))
+
+    tab:refresh()
+    ready({
+      entry("first", "a1", "b3"),
+      entry("second", "a2", "b2"),
+      entry("third", "a3", "b3"),
+    })
+    assert.are.same({
+      "direct",
+      "main",
+      "topic",
+      "[ ] M first +3 -2",
+      "[x] M second +3 -2",
+      "[ ] M third +3 -2",
+    }, h.lines(tab.bufnr))
+
+    tab:refresh()
+    ready({ entry("first", "a1", "b1"), entry("second", "a2", "b2") })
+    assert.are.same({ "direct", "main", "topic", "[ ] M first +3 -2", "[x] M second +3 -2" }, h.lines(tab.bufnr))
+  end)
+
+  it("keeps marks toggled while a refresh is pending", function()
+    local tab, bottom = open()
+    ready({ entry("first", "a1", "b1"), entry("second", "a2", "b2") })
+    tab:refresh()
+    api.nvim_win_set_cursor(bottom, { 4, 0 })
+    h.press("x")
+    ready({ entry("first", "a1", "b1"), entry("second", "a2", "b2") })
+    assert.are.same({ "direct", "main", "topic", "[x] M first +3 -2", "[ ] M second +3 -2" }, h.lines(tab.bufnr))
   end)
 
   it("exposes change rows and their buffer lines", function()

@@ -29,11 +29,22 @@ function DiffSnapshot:refresh(ctx)
     return -1
   end
   local entries = Git.diff(ctx, self.root, old, new, style == "merge-base")
+  ---@type table<string, boolean>
+  local marked = {}
+  for _, row in ipairs(self.rows) do
+    if row.kind == "diff" then
+      if row.checked then
+        marked[row:identity()] = true
+      end
+    end
+  end
   ---@type aviary.hawk.snapshot.row.Row[]
   local rows = { self.style_row, self.old_row, self.new_row }
   local first = #rows
   for _, entry in ipairs(entries) do
-    rows[#rows + 1] = Row.diff(entry)
+    local row = Row.diff(entry)
+    row.checked = marked[row:identity()] == true
+    rows[#rows + 1] = row
   end
   self.rows = rows
   old = old:match("^%x+$") and old:sub(1, 7) or old

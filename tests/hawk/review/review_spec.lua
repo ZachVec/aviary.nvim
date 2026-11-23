@@ -151,6 +151,32 @@ describe("Review Git object comparisons", function()
     assert.are.equal("a.txt", row.old_path)
   end)
 
+  it("identifies captured changes by paths, status, kind and blobs", function()
+    local function changed(new_blob)
+      return {
+        root = dir,
+        path = "a.txt",
+        status = "M",
+        kind = "text",
+        old_blob = "old",
+        new_blob = new_blob,
+      }
+    end
+    assert.are.equal(Row.diff(changed("new")):identity(), Row.diff(changed("new")):identity())
+    assert.are_not.equal(Row.diff(changed("new")):identity(), Row.diff(changed("changed")):identity())
+
+    local rename = {
+      root = dir,
+      path = "a.txt",
+      old_path = "b.txt",
+      status = "R",
+      kind = "text",
+      old_blob = "old",
+      new_blob = "new",
+    }
+    assert.are_not.equal(Row.diff(changed("new")):identity(), Row.diff(rename):identity())
+  end)
+
   it("caps displayed counts at 10k+ while preserving the actual counts", function()
     for _, count in ipairs({ 9999, 10000 }) do
       h.write(dir, "a.txt", vim.split(string.rep("new\n", count), "\n", { trimempty = true }))
