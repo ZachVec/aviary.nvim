@@ -43,9 +43,13 @@ local defaults = {
         end
       end
       if row.input.kind == "choice" then
-        vim.ui.select(row.input.choices, {}, confirm)
+        vim.ui.select(row.input.choices, {
+          format_item = function(item)
+            return item == row.value and (item .. " [current]") or item
+          end,
+        }, confirm)
       else
-        vim.ui.input({}, confirm)
+        vim.ui.input({ default = row.value }, confirm)
       end
     end,
     refresh = function(tab)

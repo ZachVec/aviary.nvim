@@ -88,6 +88,38 @@ function M.select_input(lnum, value)
   assert(ok, err)
 end
 
+---@param lnum integer
+---@return table opts options passed to vim.ui.input
+function M.input_opts(lnum)
+  vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+  local input, opts = vim.ui.input, nil
+  ---@diagnostic disable-next-line: duplicate-set-field
+  vim.ui.input = function(options, confirm)
+    opts = options
+    confirm(nil)
+  end
+  local ok, err = pcall(M.press, "<CR>")
+  vim.ui.input = input
+  assert(ok, err)
+  return assert(opts)
+end
+
+---@param lnum integer
+---@return fun(item: string): string format_item
+function M.select_format(lnum)
+  vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+  local select, format = vim.ui.select, nil
+  ---@diagnostic disable-next-line: duplicate-set-field
+  vim.ui.select = function(_, opts, confirm)
+    format = opts.format_item
+    confirm(nil)
+  end
+  local ok, err = pcall(M.press, "<CR>")
+  vim.ui.select = select
+  assert(ok, err)
+  return assert(format)
+end
+
 ---@return aviary.hawk.Tab, integer
 function M.open()
   local config = require("aviary.hawk.config")

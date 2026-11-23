@@ -23,9 +23,10 @@ The bottom buffer starts with a `style` row set to `direct`, followed by empty
 
 The `hawk` action opens `vim.ui.input()` on a revision row, `vim.ui.select()` on
 the `style` row, and opens a preview on a change row. Enter invokes this action
-by default. Confirming applies the value to the row that opened the prompt. An
-empty or whitespace-only revision input clears the value. Cancelling preserves
-the draft.
+by default. The revision input starts with the current draft, and the style
+selector marks the current value as `[current]`. Confirming applies the value to
+the row that opened the prompt. An empty or whitespace-only revision input clears
+the value. Cancelling preserves the draft.
 
 Each revision row accepts a Git revision such as a branch, tag, commit SHA or
 `HEAD~2`. Git resolves both revisions on each refresh, including `HEAD` in a
@@ -67,10 +68,11 @@ and read `[x]` (`DiagnosticOk`). Read marks belong to the current list in each
 Review tab. A successful refresh starts the new list with all rows unread.
 
 `hawk` on a change loads the selected file into the readonly `old` and `new`
-windows and keeps the focus in the list. Both previews start at the top of the
-file and use the blobs captured at refresh. Refresh leaves the displayed
-previews in place. Binary and submodule entries show a description in each
-pane. Selecting another item or closing the tab cancels pending preview reads.
+windows and keeps the focus in the list. Both previews open at the first change
+and use the blobs captured at refresh. `]c` and `[c` move between changes in
+either preview. Refresh leaves the displayed previews in place. Binary and
+submodule entries show a description in each pane. Selecting another item or
+closing the tab cancels pending preview reads.
 
 Preview buffer names use the tab ID and side, as in `2:old/lua/main.lua` and
 `2:new/lua/main.lua`. Renames use the original path on the left and the new path

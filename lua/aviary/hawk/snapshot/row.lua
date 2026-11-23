@@ -204,6 +204,11 @@ function DiffRow:jump(tab)
     vim.api.nvim_win_call(tab.new_win, function()
       vim.cmd("diffupdate")
     end)
+    for _, win in ipairs({ tab.old_win, tab.new_win }) do
+      vim.api.nvim_win_call(win, function()
+        vim.cmd("silent! normal! ]c")
+      end)
+    end
   end)
 end
 
