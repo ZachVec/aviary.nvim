@@ -48,19 +48,21 @@ Pigeon resolves keymaps and actions when it creates the Terminal. The keymaps
 are buffer-local and active in Terminal mode. Later setup changes apply to new
 Terminals. Every mapped action needs a handler. Built-ins are available by name.
 
-Built-ins are `close`, `prompt` and `pick`. `close` closes the current window.
-`prompt` selects a named template and sends it. `pick` switches the Terminal's
-Agent and marks the current Agent in its selector. Both selectors resume
-Terminal input on confirmation or cancellation. `prompt` and `pick` use only
+Built-ins are `buffers`, `close`, `pick` and `prompt`. `buffers` selects one
+file-backed listed buffer and sends its path. `close` closes the current window.
+`pick` switches the Terminal's Agent and marks the current Agent in its selector.
+`prompt` selects a named template and sends it. The selectors resume Terminal
+input on confirmation or cancellation. `buffers`, `pick` and `prompt` use only
 the keys you configure.
 
 ```lua
 require("aviary").setup({
   pigeon = {
     keymaps = {
+      buffers = { "<C-b>" },
       close = { "<C-.>" },
-      prompt = { "<C-p>" },
       pick = { "<F5>" },
+      prompt = { "<C-p>" },
     },
   },
 })
@@ -92,11 +94,31 @@ end
 agent:send(table.concat(texts, "\n"))
 ```
 
-### Files and buffers actions
+### Buffers action
 
-Pigeon ships no picker and no built-in `files` or `buffers` action. Define the
-action with whichever picker you use. The picker owns discovery, previews,
-selection rules and its own cleanup; deliver after its UI has closed.
+The built-in `buffers` action lists buffers that are listed, named, and have an
+empty `buftype`. It opens `vim.ui.select` and sends a whole-file reference for
+the selected buffer's path. Confirming or cancelling resumes Terminal input. It
+warns when no such buffer exists. The action selects one buffer at a time;
+define a custom action if you need multi-selection. It reads no buffer contents,
+so unsaved changes are not included.
+
+```lua
+require("aviary").setup({
+  pigeon = {
+    keymaps = { buffers = { "<C-b>" } },
+  },
+})
+```
+
+The selector is the editor's configured `vim.ui.select` implementation; Pigeon
+does not choose or depend on a picker.
+
+### Files action
+
+Pigeon ships no built-in `files` action. Define it with whichever picker you use.
+The picker owns discovery, previews, selection rules and its own cleanup; deliver
+after its UI has closed.
 
 Snacks example:
 
@@ -351,11 +373,11 @@ resources or checking executable availability. Unknown fields are rejected;
 on failure. See [setup scope](../README.md#installation).
 
 Weaver, its text action, the shared Message tree and the built-in picker
-configuration are removed. Use Pigeon actions instead: `prompt` and `pick` are
-built in, and files/buffers are user actions for your picker. Action handlers
-receive a `current` getter; resolve the Agent once, then use `agent:eval` and
-`agent:send`. Raw text can be pasted with your editor or agent, or sent from a
-custom action. There is no public `pigeon.send`, `pigeon.pick` or
+configuration are removed. Use Pigeon actions instead: `prompt`, `pick` and
+`buffers` are built in, and files actions are user actions for your picker.
+Action handlers receive a `current` getter; resolve the Agent once, then use
+`agent:eval` and `agent:send`. Raw text can be pasted with your editor or agent,
+or sent from a custom action. There is no public `pigeon.send`, `pigeon.pick` or
 `pigeon.status`; compose content in actions and switch Agents with the `pick`
 action. References are plain `{ path, start_row?, end_row? }` tables rendered
 with `agent:eval`. Clipboard support and the old nested `pigeon.backend`

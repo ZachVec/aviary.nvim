@@ -14,9 +14,9 @@ Review Git changes and send references or prompts to agents displayed in Neovim.
 - Neovim 0.11+; Git for Review.
 - Pigeon: tmux 3.8+; Neovim must run inside tmux on the default socket.
 - An installed agent CLI, such as Codex or Claude, to create its tool instance.
-- Pigeon ships no picker dependency. Add your own
-  [files and buffers actions](./docs/pigeon.md#files-and-buffers-actions) for
-  whichever picker you use.
+- Pigeon ships no picker dependency. Its built-in `buffers` action uses
+  `vim.ui.select`; add a
+  [files action](./docs/pigeon.md#files-action) for whichever picker you use.
 
 ## Installation
 
@@ -31,9 +31,10 @@ Install with lazy.nvim:
   opts = {
     pigeon = {
       keymaps = {
+        buffers = { "<C-b>" }, -- optional: send a listed buffer's path
         close = { "<C-.>" },
-        prompt = { "<C-p>" }, -- optional: open the prompt template menu
         pick = { "<F5>" }, -- optional: switch the Terminal's Agent
+        prompt = { "<C-p>" }, -- optional: open the prompt template menu
       },
     },
   },
@@ -78,14 +79,14 @@ mark, or `X` to toggle all read marks. Each tab keeps its own worktree and
 results. See the [Hawk manual](./docs/hawk.md#review) for details.
 
 [Pigeon actions](./docs/pigeon.md#actions) run from the Terminal and receive a
-lazy current-Agent getter and the captured reference. Bind the built-in `prompt`
-and `pick` actions in `pigeon.keymaps`, then open Pigeon from a source file
-window:
+lazy current-Agent getter and the captured reference. Bind the built-in `prompt`,
+`pick` and `buffers` actions in `pigeon.keymaps`, then open Pigeon from a source
+file window:
 
 ```lua
 require("aviary").pigeon.show()
 -- In the Terminal, press the prompt keymap to send a template about that reference,
--- or the pick keymap to switch Agents.
+-- the pick keymap to switch Agents, or the buffers keymap to send a buffer path.
 ```
 
 The reference is the current file and cursor line, or the Visual whole-line range
@@ -101,9 +102,9 @@ end)
 `x` is Visual-only; `v` would also bind Select mode, where Pigeon captures only
 the cursor line. Cancellation sends nothing.
 
-Pigeon has no built-in files/buffers actions and no picker dependency. Add an
-action for your picker; see the
-[files and buffers example](./docs/pigeon.md#files-and-buffers-actions).
+Pigeon has a built-in `buffers` action that uses `vim.ui.select`, and no picker
+dependency. Add a `files` action for your picker; see the
+[files action example](./docs/pigeon.md#files-action).
 
 ## Default Options
 
@@ -136,7 +137,7 @@ require("aviary").setup({
       },
     },
     keymaps = { close = { "<C-.>" } },
-    actions = {}, -- built-in close and prompt; user handlers merge
+    actions = {}, -- built-in buffers, close, pick and prompt; user handlers merge
     prompts = { ["{file}"] = "{file} ", ["{line}"] = "{line} " },
     resolvers = {}, -- merges over the built-in file and line resolvers
     view = { width = 0.9, height = 0.9, border = "rounded" },

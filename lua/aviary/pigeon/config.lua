@@ -159,6 +159,43 @@ local defaults = {
         )
       end)()
     end,
+    buffers = function(current)
+      local protect = require("aviary.shared.protect")
+      protect(function()
+        local names = {}
+        for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+          if vim.bo[buffer].buflisted and vim.bo[buffer].buftype == "" then
+            local name = vim.api.nvim_buf_get_name(buffer)
+            if name ~= "" then
+              names[#names + 1] = name
+            end
+          end
+        end
+        if #names == 0 then
+          require("aviary.shared.notify").warn("pigeon: no file buffers")
+          return
+        end
+        table.sort(names)
+        local agent = current()
+        vim.ui.select(
+          names,
+          {
+            prompt = "Buffer: ",
+            format_item = function(name)
+              return vim.fn.fnamemodify(name, ":~:.")
+            end,
+          },
+          protect(function(name)
+            -- Snacks returns focus before leaving Insert mode and calls on_choice afterward.
+            vim.cmd.startinsert()
+            if not name then
+              return
+            end
+            agent:send(agent:eval({ path = name }))
+          end)
+        )
+      end)()
+    end,
   },
   prompts = {
     ["{file}"] = "{file} ",

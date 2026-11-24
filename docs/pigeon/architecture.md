@@ -45,10 +45,11 @@ the captured one.
 
 `Terminal.create` installs buffer-local keymaps for Terminal mode. Each callback
 calls `handler(current, state.reference)` with a lazy getter that resolves the
-Agent displayed by the Terminal's client. Built-in `close`, `prompt` and `pick`
-handlers live in the config defaults, so config validation resolves their names
-like user actions. User handlers merge over defaults; no separate action module
-is involved. Handlers that do not call the getter perform no tmux lookup.
+Agent displayed by the Terminal's client. Built-in `buffers`, `close`, `pick`
+and `prompt` handlers live in the config defaults, so config validation resolves
+their names like user actions. User handlers merge over defaults; no separate
+action module is involved. Handlers that do not call the getter perform no tmux
+lookup.
 
 The built-in prompt action resolves the current Agent once, reads the running
 `prompts` and `resolvers`, captures them with the reference, opens
@@ -67,10 +68,18 @@ the asynchronous selector callback are wrapped in
 [protect](../../lua/aviary/shared/protect.lua); resolution failure warns once and
 does not open the selector.
 
-Files/buffers actions are user configuration, not Pigeon core. They resolve the
-current Agent, open their picker, collect absolute paths, render each with
-`agent:eval`, join the strings, and call `agent:send`. Pigeon therefore has no
-picker interface or optional picker dependency.
+The built-in buffers action lists listed, named buffers with an empty `buftype`
+and resolves the current Agent once. It opens `vim.ui.select`; confirmation
+renders a whole-file reference and sends it, while cancellation only resumes
+Terminal input. Buffer enumeration is editor-local and synchronous, so the action
+adds no picker interface or optional dependency. Its selector callback is
+wrapped in [protect](../../lua/aviary/shared/protect.lua).
+
+Files actions are user configuration, not Pigeon core. File discovery, previews
+and selection rules depend on the picker, so these actions resolve the current
+Agent, open their picker, collect absolute paths, render each with `agent:eval`,
+join the strings, and call `agent:send`. Pigeon defines no picker interface and
+adds no optional picker dependency.
 
 ## Backend and delivery
 
