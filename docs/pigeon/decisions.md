@@ -9,10 +9,19 @@ See [architecture](./architecture.md) for collaboration and resource lifetimes.
 
 Pigeon exposes no public send function. Action handlers receive a lazy
 current-Agent getter and the captured reference; they resolve the Agent once when
-needed and call `agent:send`/`agent:eval` themselves. Files/buffers actions are
-user configuration rather than built-ins so Pigeon carries no picker interface or
-optional picker dependency; the cost is that users write the picker integration
-and own its asynchronous cleanup.
+needed and call `agent:send`/`agent:eval` themselves. Files actions remain user
+configuration so Pigeon carries no picker interface or optional picker
+dependency; the cost is that users write the picker integration and own its
+asynchronous cleanup.
+
+## Built-in buffers action uses the editor selection UI
+
+The built-in `buffers` action enumerates listed, named buffers with an empty
+`buftype` locally and uses `vim.ui.select` instead of an external picker. Buffer enumeration is cheap
+and synchronous, and the native selector adds no picker dependency; the
+trade-off is single selection and no previews. Files actions remain user
+configuration because file discovery and selection behavior depend on the
+picker.
 
 ## Actions receive a lazy current-Agent getter
 
@@ -53,12 +62,12 @@ different join or layout override the action or resolver.
 
 ## Built-in actions and resolvers live in config
 
-`close`, `prompt` and `pick` handlers, default prompts and built-in `file`/`line`
-resolvers live in the config defaults, so user overrides merge naturally and
-keymap validation recognizes built-in action names without a separate registry.
-The trade-off is that the config module contains the prompt and pick workflows
-rather than only data; the alternative was an init-side built-in table
-duplicating the names.
+`buffers`, `close`, `pick` and `prompt` handlers, default prompts and built-in
+`file`/`line` resolvers live in the config defaults, so user overrides merge
+naturally and keymap validation recognizes built-in action names without a
+separate registry. The trade-off is that the config module contains the buffers,
+prompt and pick workflows rather than only data; the alternative was an init-side
+built-in table duplicating the names.
 
 ## Host server, one Agent per session
 
