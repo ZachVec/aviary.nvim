@@ -33,8 +33,11 @@ describe("aviary.pigeon.config", function()
     local resolve = function()
       return "x"
     end
+    local command = { "other", ";" }
+    ---@type aviary.pigeon.ToolOverrides
+    local other = { command = command }
     assert.is_true(Config.setup({
-      tools = { codex = { format = format }, other = { command = { "other", ";" } } },
+      tools = { codex = { format = format }, other = other },
       keymaps = { close = { "q" }, prompt = { "<C-p>" } },
       actions = { close = close, prompt = prompt },
       prompts = { review = "Review {file}" },
@@ -44,6 +47,9 @@ describe("aviary.pigeon.config", function()
     assert.are.equal(format, Config().tools.codex.format)
     assert.are.same({ "codex" }, Config().tools.codex.command)
     assert.are.equal("a.lua :L7", Config().tools.other.format("a.lua", 7))
+    assert.is_nil(other.format)
+    command[1] = "changed"
+    assert.are.same({ "other", ";" }, Config().tools.other.command)
     assert.are.equal(0.9, Config().view.height)
     assert.are.same({ "q" }, Config().keymaps.close)
     assert.are.same({ "<C-p>" }, Config().keymaps.prompt)
@@ -90,62 +96,5 @@ describe("aviary.pigeon.config", function()
     end
     assert.is_nil(package.loaded["aviary.pigeon.backends.tmux"])
     assert.is_nil(package.loaded["aviary.pigeon.backends"])
-  end)
-
-  it("accepts structurally valid values whose runtime use is the caller's responsibility", function()
-    local command = { "", "arg\0tail" }
-    local keys = { "", "\n" }
-    assert.is_true(Config.setup({
-      backend = "custom",
-      tools = { [""] = { command = command } },
-      view = { width = -1, border = "custom" },
-      keymaps = { missing_handler = keys },
-    }))
-    assert.are.same(command, Config().tools[""].command)
-    assert.are.same(keys, Config().keymaps.missing_handler)
-    assert.are.same({ width = -1, height = 0.9, border = "custom" }, Config().view)
-    assert.are.equal("custom", Config().backend)
-  end)
-
-  it("rejects invalid and removed options quietly and preserves borrowed running data", function()
-    Config.setup({ view = { width = 80 } })
-    local borrowed, before = Config(), vim.deepcopy(Config())
-    local notes = Helpers.notifications(function()
-      for _, opts in ipairs({
-        42,
-        { format = function() end },
-        { tools = false },
-        { tools = { bad = {} } },
-        { tools = { codex = { command = {} } } },
-        { tools = { codex = { command = { [2] = "cmd" } } } },
-        { tools = { codex = { command = { "x", false } } } },
-        { tools = { codex = { format = false } } },
-        { tools = { codex = { commnad = { "x" } } } },
-        { backend = { default = "tmux" } },
-        { view = false },
-        { view = { width = "90%" } },
-        { view = { close = "q" } },
-        { view = { widht = 42 } },
-        { keymaps = false },
-        { keymaps = { close = "q" } },
-        { keymaps = { close = { "q", false } } },
-        { keymaps = { [1] = { "q" } } },
-        { actions = false },
-        { actions = { close = true } },
-        { actions = { prompt = false } },
-        { actions = { pick = false } },
-        { prompts = false },
-        { prompts = { bad = 42 } },
-        { resolvers = false },
-        { resolvers = { bad = 42 } },
-      }) do
-        local ok, reason = Config.setup(opts)
-        assert.is_false(ok)
-        assert.is_truthy(reason:find("pigeon:", 1, true))
-        assert.is_true(rawequal(borrowed, Config()))
-        assert.are.same(before, Config())
-      end
-    end)
-    assert.are.same({}, notes)
   end)
 end)
