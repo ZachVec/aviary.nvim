@@ -111,8 +111,8 @@ require("aviary").setup({
 Each key array replaces defaults. Use `{}` to disable an action's keys. To
 change the keys for the row action, set `hawk.keymaps.hawk`. To override how
 the row action handles input or previews, supply `hawk.actions.hawk`. Actions
-can also supply handlers for custom mappings. Review installs the mappings in
-its list buffer when it opens.
+can also supply handlers for custom mappings. Supply a handler for every mapped
+action. Review installs the mappings in its list buffer when it opens.
 
 Actions receive the owning Tab. An input callback can use the row captured when
 the prompt opened while that row still belongs to the open Tab.

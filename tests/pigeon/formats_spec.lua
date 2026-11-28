@@ -8,8 +8,7 @@ describe("pigeon tool formats", function()
   end)
 
   it("spells Codex paths and raw inclusive ranges", function()
-    local format = Config().format
-    assert.is_nil(Config().tools.codex.format)
+    local format = Config().tools.codex.format
     assert.are.equal("a.lua", format("a.lua"))
     assert.are.equal("a.lua :L7", format("a.lua", 7))
     assert.are.equal("a.lua :L7", format("a.lua", 7, 7))

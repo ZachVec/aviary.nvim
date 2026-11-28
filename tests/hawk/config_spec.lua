@@ -12,7 +12,7 @@ describe("Hawk Review options", function()
     assert.are.same({}, config().keymaps.close)
     assert.are.same({ "o" }, config().keymaps.hawk)
     assert.are.same({ "r" }, config().keymaps.refresh)
-    config.setup()
+    assert.is_true(config.setup())
     assert.are.same({ "q" }, config().keymaps.close)
     assert.are.same({ "<CR>" }, config().keymaps.hawk)
     assert.are.same({ "X" }, config().keymaps.toggle_all)
@@ -23,9 +23,9 @@ describe("Hawk Review options", function()
     local before, saved = config(), vim.deepcopy(config())
     for _, case in ipairs({
       { options = { keympas = {} }, reason = "unknown option keympas" },
-      { options = { keymaps = false }, reason = "keymaps and actions must be tables" },
-      { options = { keymaps = { hawk = "o" } }, reason = "keymaps must map actions to lists of keys" },
-      { options = { actions = { bad = true } }, reason = "actions must map names to functions" },
+      { options = { keymaps = false }, reason = "keymaps must be a table" },
+      { options = { keymaps = { hawk = "o" } }, reason = "keymaps.hawk must be an array" },
+      { options = { actions = { bad = true } }, reason = "actions.bad must be a function" },
     }) do
       local ok, message = config.setup(case.options)
       assert.is_false(ok)
@@ -35,13 +35,12 @@ describe("Hawk Review options", function()
     end
   end)
 
-  it("requires a handler for every mapped action", function()
+  it("provides handlers for default mappings and accepts structurally valid keymaps", function()
     for action in pairs(config().keymaps) do
       assert.is_function(config().actions[action])
     end
-    local ok, reason = config.setup({ keymaps = { missing_handler = { "<Tab>" } } })
-    assert.is_false(ok)
-    assert.matches("no handler for missing_handler", assert(reason))
+    assert.is_true(config.setup({ keymaps = { missing_handler = { "<Tab>" } } }))
+    assert.are.same({ "<Tab>" }, config().keymaps.missing_handler)
   end)
 
   it("accepts custom actions alongside built-ins", function()

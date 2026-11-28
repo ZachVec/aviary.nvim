@@ -46,10 +46,9 @@ the captured one.
 `Terminal.create` installs buffer-local keymaps for Terminal mode. Each callback
 calls `handler(current, state.reference)` with a lazy getter that resolves the
 Agent displayed by the Terminal's client. Built-in `buffers`, `close`, `pick`
-and `prompt` handlers live in the config defaults, so config validation resolves
-their names like user actions. User handlers merge over defaults; no separate
-action module is involved. Handlers that do not call the getter perform no tmux
-lookup.
+and `prompt` handlers live in the config defaults. User handlers merge over those
+defaults, and Terminal creation looks up each mapped action in the resulting
+handler table. Handlers that do not call the getter perform no tmux lookup.
 
 The built-in prompt action resolves the current Agent once, reads the running
 `prompts` and `resolvers`, captures them with the reference, opens

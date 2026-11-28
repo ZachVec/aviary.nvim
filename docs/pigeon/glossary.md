@@ -2,7 +2,7 @@
 
 | Term | Meaning |
 | --- | --- |
-| Tool | A named Agent command and optional reference formatter. |
+| Tool | A named Agent command and reference formatter. |
 | Agent | One running tool instance, backed by a persistent tmux session with exactly one agent window. It carries its tool key and launch cwd, survives editor clients, and is the selectable delivery destination. _Avoid_: Target, Receiver. |
 | Choice | An existing Agent or an intent to create one; creation waits for selection. |
 | Terminal | The Neovim buffer, optional floating window, attach job and client displaying one Agent; each editor owns at most one. It stores the client, not an Agent. |

@@ -321,7 +321,7 @@ describe("aviary", function()
         path = "aviary.pigeon",
         valid = { view = { width = 0.8 } },
         invalid = { view = { width = false } },
-        field = "view width/height",
+        field = "view.width",
       },
     }) do
       local module = require(spec.path)

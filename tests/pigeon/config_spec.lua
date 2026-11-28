@@ -34,17 +34,16 @@ describe("aviary.pigeon.config", function()
       return "x"
     end
     assert.is_true(Config.setup({
-      format = format,
-      tools = { codex = { command = { "my-codex" } }, other = { command = { "other", ";" } } },
+      tools = { codex = { format = format }, other = { command = { "other", ";" } } },
       keymaps = { close = { "q" }, prompt = { "<C-p>" } },
       actions = { close = close, prompt = prompt },
       prompts = { review = "Review {file}" },
       resolvers = { custom = resolve },
       view = { width = 80 },
     }))
-    assert.are.equal(format, Config().format)
-    assert.is_nil(Config().tools.codex.format)
-    assert.are.same({ "my-codex" }, Config().tools.codex.command)
+    assert.are.equal(format, Config().tools.codex.format)
+    assert.are.same({ "codex" }, Config().tools.codex.command)
+    assert.are.equal("a.lua :L7", Config().tools.other.format("a.lua", 7))
     assert.are.equal(0.9, Config().view.height)
     assert.are.same({ "q" }, Config().keymaps.close)
     assert.are.same({ "<C-p>" }, Config().keymaps.prompt)
@@ -76,15 +75,12 @@ describe("aviary.pigeon.config", function()
     assert.is_function(Config().actions.close)
   end)
 
-  it("accepts built-in actions in keymaps and rejects actions without handlers", function()
+  it("accepts built-in action names in keymaps", function()
     assert.is_true(Config.setup({
       keymaps = { buffers = { "<C-b>" }, prompt = { "<C-p>" }, pick = { "<F5>" } },
     }))
     assert.are.same({ "<C-b>" }, Config().keymaps.buffers)
     assert.are.same({ "<F5>" }, Config().keymaps.pick)
-    local ok, reason = Config.setup({ keymaps = { files = { "<C-f>" } } })
-    assert.is_false(ok)
-    assert.are.equal("pigeon: no handler for files", reason)
   end)
 
   it("accepts fractions/cells without resolving editor geometry or acquiring resources", function()
@@ -96,39 +92,44 @@ describe("aviary.pigeon.config", function()
     assert.is_nil(package.loaded["aviary.pigeon.backends"])
   end)
 
+  it("accepts structurally valid values whose runtime use is the caller's responsibility", function()
+    local command = { "", "arg\0tail" }
+    local keys = { "", "\n" }
+    assert.is_true(Config.setup({
+      backend = "custom",
+      tools = { [""] = { command = command } },
+      view = { width = -1, border = "custom" },
+      keymaps = { missing_handler = keys },
+    }))
+    assert.are.same(command, Config().tools[""].command)
+    assert.are.same(keys, Config().keymaps.missing_handler)
+    assert.are.same({ width = -1, height = 0.9, border = "custom" }, Config().view)
+    assert.are.equal("custom", Config().backend)
+  end)
+
   it("rejects invalid and removed options quietly and preserves borrowed running data", function()
     Config.setup({ view = { width = 80 } })
     local borrowed, before = Config(), vim.deepcopy(Config())
     local notes = Helpers.notifications(function()
       for _, opts in ipairs({
-        false,
         42,
-        { format = false },
+        { format = function() end },
         { tools = false },
         { tools = { bad = {} } },
         { tools = { codex = { command = {} } } },
-        { tools = { codex = { command = { "" } } } },
+        { tools = { codex = { command = { [2] = "cmd" } } } },
         { tools = { codex = { command = { "x", false } } } },
         { tools = { codex = { format = false } } },
         { tools = { codex = { commnad = { "x" } } } },
-        { backend = "missing" },
         { backend = { default = "tmux" } },
         { view = false },
         { view = { width = "90%" } },
-        { view = { width = 1.5 } },
-        { view = { width = 0 } },
-        { view = { height = -1 } },
-        { view = { width = math.huge } },
-        { view = { width = 0 / 0 } },
         { view = { close = "q" } },
-        { view = { border = "invalid" } },
         { view = { widht = 42 } },
         { keymaps = false },
         { keymaps = { close = "q" } },
-        { keymaps = { close = { "" } } },
         { keymaps = { close = { "q", false } } },
         { keymaps = { [1] = { "q" } } },
-        { keymaps = { missing_handler = { "q" } } },
         { actions = false },
         { actions = { close = true } },
         { actions = { prompt = false } },
