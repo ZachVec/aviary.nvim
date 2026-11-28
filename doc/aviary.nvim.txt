@@ -83,8 +83,8 @@ Previously root-configured features omitted from the call also reset to
 defaults. `setup()` and `setup({})` reset all such features. Features never
 configured through root are left untouched. Calling
 `aviary.<feature>.setup(opts)` directly rebuilds only that feature. Modules
-load lazily by name. Setup checks configuration structure and acquires no
-runtime resources.
+load lazily by name. Use the option names, types and values documented for each
+feature. Setup acquires no runtime resources.
 
 
 ==============================================================================
