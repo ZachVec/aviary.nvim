@@ -354,9 +354,10 @@ tmux bindings may consume keys before Neovim sees them.
 6. Tools and formatting                     *pigeon.nvim-tools-and-formatting*
 
 Built-ins are `codex` and `claude`. Partial overrides preserve their other
-fields; custom tools require a nonempty `command` argv list. Commands execute
-directly, without shell interpretation. The editor’s cwd is captured when
-creation begins.
+fields. Custom tools require a nonempty `command` list with the program name
+first. Supply arguments without embedded NUL bytes. Commands execute directly,
+without shell interpretation. The editor’s cwd is captured when creation
+begins.
 
 >lua
     require("aviary").setup({
@@ -377,9 +378,9 @@ creation begins.
 
 Each reference is rendered using the Terminal’s current Agent. That Agent
 supplies its launch cwd and the current local same-named tool formatter. Paths
-inside the launch cwd are relative; others stay absolute. A tool’s `format`
-overrides `pigeon.format`. Codex uses the default `file :L12-15`; Claude uses
-`@file#L12-15`, quoting unusual paths.
+inside the launch cwd are relative; others stay absolute. Set `format` under
+the tool to give it a custom formatter. Codex and custom tools default to `file
+:L12-15`. Claude defaults to `@file#L12-15`, quoting unusual paths.
 
 Pigeon changes the Agent displayed by this editor’s tmux client only through
 `show()` creation or the `pick` action. Actions resolve the current Agent from
@@ -404,10 +405,14 @@ ends the request. There is no fallback to an earlier Agent.
 7. Health and migration                     *pigeon.nvim-health-and-migration*
 
 Run `:checkhealth aviary.pigeon` for tmux version/context and tool executables.
-Health is read-only. Setup merges and validates configuration without acquiring
-resources or checking executable availability. Unknown fields are rejected;
-`pigeon.setup(opts)` returns `false, reason` and preserves running
-configuration on failure. See setup scope |aviary.nvim-installation|.
+Health is read-only. Setup merges defaults and checks configuration structure
+before any runtime resources are acquired. Callers supply valid option values
+for use at runtime. `pigeon.setup(opts)` returns `false, reason` and preserves
+running configuration on validation failure. See setup scope
+|aviary.nvim-installation|.
+
+Move a former top-level `pigeon.format` to `pigeon.tools.<name>.format` for
+each tool that used it.
 
 Weaver, its text action, the shared Message tree and the built-in picker
 configuration are removed. Use Pigeon actions instead: `prompt`, `pick` and

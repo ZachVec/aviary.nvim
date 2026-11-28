@@ -77,13 +77,14 @@ client displays. Agent exit closes attached Terminals naturally. See agents and
 display |pigeon.nvim-agents-and-display| for terminal and tmux behavior. Failed
 requests warn once and are never automatically replayed.
 
-Root setup accepts public feature names; nested tables belong to their feature.
-Each call rebuilds from feature defaults and the current options. Previously
-root-configured features omitted from the call also reset to defaults;
-`setup()` and `setup({})` reset all such features. Features never configured
-through root are left untouched. Calling `aviary.<feature>.setup(opts)`
-directly rebuilds only that feature. Modules load lazily by name. Setup
-validates data and acquires no runtime resources.
+Root setup accepts a table of overrides for each named public feature. Each
+call rebuilds those features from defaults and the supplied overrides.
+Previously root-configured features omitted from the call also reset to
+defaults. `setup()` and `setup({})` reset all such features. Features never
+configured through root are left untouched. Calling
+`aviary.<feature>.setup(opts)` directly rebuilds only that feature. Modules
+load lazily by name. Setup checks configuration structure and acquires no
+runtime resources.
 
 
 ==============================================================================
@@ -146,12 +147,8 @@ Default Options ~
         actions = {}, -- handlers receive the owning Review Tab
       },
       pigeon = {
-        format = function(path, first, last)
-          if not first then return path end
-          return path .. " :L" .. first .. (last and last ~= first and "-" .. last or "")
-        end,
         tools = {
-          codex = { command = { "codex" } }, -- uses pigeon.format
+          codex = { command = { "codex" } }, -- uses the default formatter
           claude = {
             command = { "claude" },
             format = function(path, first, last)
