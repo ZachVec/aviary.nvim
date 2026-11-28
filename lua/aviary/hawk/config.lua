@@ -15,8 +15,6 @@ local M = {}
 ---@field keymaps aviary.hawk.config.Keymaps action name to complete key set
 ---@field actions aviary.hawk.config.Actions defaults, overrides and user-defined handlers
 
-local Schema = require("aviary.shared.schema")
-
 ---@type aviary.hawk.config.Actions
 local actions = {}
 
@@ -77,33 +75,26 @@ function actions.toggle_check(tab)
   end
 end
 
--- stylua: ignore
-local schema = Schema.object({
-  keymaps = Schema.object({ [Schema.string()] = Schema.array("string") }, {
-    default = {
-      close = { "q" },
-      hawk = { "<CR>" },
-      refresh = { "r" },
-      toggle_all = { "X" },
-      toggle_check = { "x" }
-    }
-  }),
-  actions = Schema.object({ [Schema.string()] = Schema.func() }, { default = actions })
-})
-
 ---@type aviary.hawk.config.Config
-local options = assert(Schema.resolve(schema, {}, "hawk"))
+-- stylua: ignore
+local defaults = {
+  keymaps = {
+    close = { "q" },
+    hawk = { "<CR>" },
+    refresh = { "r" },
+    toggle_all = { "X" },
+    toggle_check = { "x" }
+  },
+  actions = actions
+}
+
+local options = vim.deepcopy(defaults)
 
 ---@param opts? aviary.hawk.config.Options
----@return boolean ok
----@return string? message validation failure leaves previous options unchanged
+---@return true
 function M.setup(opts)
-  local config, reason = Schema.resolve(schema, opts or {}, "hawk")
-  if config == nil then
-    return false, reason
-  end
-  options = config
-  return true, nil
+  options = vim.deepcopy(vim.tbl_deep_extend("force", defaults, opts or {}))
+  return true
 end
 
 return setmetatable(M, {

@@ -277,19 +277,6 @@ describe("aviary", function()
     assert.are.same(before, aviary.config)
   end)
 
-  it("does not save a rejected slice and can retry from its previous valid config", function()
-    local aviary = require("aviary")
-    aviary.setup({ pigeon = { view = { width = 80 } } })
-    assert.has_error(function()
-      aviary.setup({ pigeon = { view = { width = false } } })
-    end)
-    assert.are.equal(80, aviary.config.pigeon.view.width)
-    assert.are.equal(80, require("aviary.pigeon.config")().view.width)
-    aviary.setup({ pigeon = { view = { width = 90 } } })
-    assert.are.equal(90, aviary.config.pigeon.view.width)
-    aviary.setup({ pigeon = {} })
-  end)
-
   it("applies the same non-root configuration repeatedly without changing its meaning", function()
     for _, spec in ipairs({
       { name = "aviary.hawk", opts = { keymaps = { close = { "Q" } } } },
@@ -303,43 +290,6 @@ describe("aviary", function()
       assert.are.same(before, config())
       assert.is_true(module.setup())
     end
-  end)
-
-  it("preserves rejected root slices and module state with useful errors for every owner", function()
-    local aviary = require("aviary")
-    local saved = vim.deepcopy(aviary.config)
-    for _, spec in ipairs({
-      {
-        name = "hawk",
-        path = "aviary.hawk",
-        valid = { keymaps = { close = { "Q" } } },
-        invalid = { keymaps = false },
-        field = "keymaps",
-      },
-      {
-        name = "pigeon",
-        path = "aviary.pigeon",
-        valid = { view = { width = 0.8 } },
-        invalid = { view = { width = false } },
-        field = "view.width",
-      },
-    }) do
-      local module = require(spec.path)
-      local config = require(spec.path .. ".config")
-      local original = vim.deepcopy(config())
-      aviary.config[spec.name] = nil
-      aviary.setup({ [spec.name] = spec.valid })
-      local root_snapshot, module_snapshot = vim.deepcopy(aviary.config), vim.deepcopy(config())
-      local ok, message = pcall(aviary.setup, { [spec.name] = spec.invalid })
-      assert.is_false(ok)
-      assert.is_truthy(message:find(spec.name .. ":", 1, true))
-      assert.is_truthy(message:find(spec.field, 1, true))
-      assert.is_truthy(message:find("must be", 1, true))
-      assert.are.same(root_snapshot, aviary.config)
-      assert.are.same(module_snapshot, config())
-      module.setup(original)
-    end
-    aviary.config = saved
   end)
 
   it("retains successful slices and stops at a rejected slice without promising order", function()

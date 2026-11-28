@@ -10,7 +10,7 @@ local transaction = require("aviary.shared.transaction")
 
 ---@class aviary.hawk
 ---@field show fun() open a new Review for global cwd's worktree; warn outside Git; creation errors propagate after rollback
----@field setup fun(opts?: aviary.hawk.config.Options): boolean, string? rebuild options from defaults and overrides
+---@field setup fun(opts?: aviary.hawk.config.Options): true rebuild options from defaults and overrides
 local M = {}
 
 --- A Review tab owns its comparison, windows, buffers and pending reads.

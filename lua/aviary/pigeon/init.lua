@@ -35,7 +35,7 @@ local state = {}
 
 ---@class aviary.pigeon
 ---@field show fun() show the Terminal; pick when no Terminal exists
----@field setup fun(opts?: aviary.pigeon.ConfigOverrides): boolean, string? rebuild configuration without replacing the Terminal
+---@field setup fun(opts?: aviary.pigeon.ConfigOverrides): true rebuild configuration without replacing the Terminal
 local M = {}
 
 ---@return vim.api.keyset.win_config
@@ -200,8 +200,7 @@ function M.show()
 end
 
 ---@param opts? aviary.pigeon.ConfigOverrides
----@return boolean
----@return string?
+---@return true
 function M.setup(opts)
   return Config.setup(opts)
 end

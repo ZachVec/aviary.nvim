@@ -54,7 +54,7 @@ NVIM_LOG_FILE=/tmp/aviary-nvim.log nvim --headless -u NONE -l tests/minit.lua --
 - **Validate untrusted boundaries.** Repository code, Neovim APIs (including overrides), and dependencies explicitly required by this repository are trusted. Validate untrusted external data and values received from other external code at entry.
 - **Optional parameters take `?` on the name, not the type:** write `---@param name? string`, never `---@param name string?`.
 - **Acquire resources transactionally.** Use the shared [transaction module](./lua/aviary/shared/transaction.lua) for fallible multi-step acquisition.
-- **Keep configuration as data.** Put configuration and shape validation in `config.lua`. Non-root `setup` only merges options over defaults, validates, and updates its own running configuration. Resolve selected behavior when used.
+- **Keep configuration as data.** Put default values and option types in `config.lua`. Non-root `setup` merges options over defaults and updates its own running configuration. Callers satisfy the option contracts. Resolve selected behavior when used.
 - **Keep comments local.** Do not restate code, expand unrelated comments, or explain distant behavior without local need rationale.
 - **Tests specify intended behavior.** When intended behavior changes, update the tests and explain why in the PR.
 - **Keep work notes local.** Store specs, tickets, task progress, troubleshooting history, and review responses as Markdown in `.scratch/<feature-slug>/`.

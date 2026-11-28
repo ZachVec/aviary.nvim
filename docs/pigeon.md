@@ -368,10 +368,9 @@ ends the request. There is no fallback to an earlier Agent.
 ## Health and migration
 
 Run `:checkhealth aviary.pigeon` for tmux version/context and tool executables.
-Health is read-only. Setup merges defaults and checks configuration structure
-before any runtime resources are acquired. Callers supply valid option values
-for use at runtime. `pigeon.setup(opts)` returns `false, reason` and preserves
-running configuration on validation failure. See [setup scope](../README.md#installation).
+Health is read-only. Setup merges overrides into defaults without acquiring
+runtime resources. Callers supply valid option names, types and values. See
+[setup scope](../README.md#installation).
 
 Move a former top-level `pigeon.format` to `pigeon.tools.<name>.format` for
 each tool that used it.

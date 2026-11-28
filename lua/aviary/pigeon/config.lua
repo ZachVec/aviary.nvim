@@ -1,12 +1,11 @@
 --- Pigeon options and built-in actions.
---- Setup rebuilds from defaults, rejects unknown fields, and preserves current
---- options on failure; it acquires no resources. Actions receive a lazy
---- current-Agent getter and the captured reference. Resolvers receive the
+--- Setup rebuilds from defaults and acquires no resources. Actions receive a
+--- lazy current-Agent getter and the captured reference. Resolvers receive the
 --- resolved Agent and reference and return text.
 ---
 --- Config() returns borrowed, read-only running options.
 ---@class aviary.pigeon.ConfigModule
----@field setup fun(opts?: aviary.pigeon.ConfigOverrides): boolean, string?
+---@field setup fun(opts?: aviary.pigeon.ConfigOverrides): true
 ---@operator call:aviary.pigeon.Config
 local M = {}
 
@@ -51,8 +50,6 @@ local M = {}
 ---@field width? number
 ---@field height? number
 ---@field border? "none"|"single"|"double"|"rounded"|"solid"|"shadow"
-
-local Schema = require("aviary.shared.schema")
 
 ---@type aviary.pigeon.Actions
 local actions = {}
@@ -163,77 +160,61 @@ function actions.buffers(current)
   end)()
 end
 
+---@type aviary.pigeon.Format
+local function format_reference(path, start_row, end_row)
+  if not start_row then
+    return path
+  end
+  local loc = (":L%d"):format(start_row)
+  if end_row and end_row ~= start_row then
+    loc = loc .. "-" .. end_row
+  end
+  return path .. " " .. loc
+end
+
+---@type aviary.pigeon.Config
 -- stylua: ignore
-local schema = Schema.object({
-  backend = Schema.string({ default = "tmux" }),
-  tools = Schema.object({
-    [Schema.string()] = Schema.object({
-      command = Schema.array("string", { min = 1 }),
-      format = Schema.func({
-        default = function(path, start_row, end_row)
-          if not start_row then
-            return path
-          end
-          local loc = (":L%d"):format(start_row)
-          if end_row and end_row ~= start_row then
-            loc = loc .. "-" .. end_row
-          end
-          return path .. " " .. loc
+local defaults = {
+  backend = "tmux",
+  tools = {
+    codex = { command = { "codex" }, format = format_reference },
+    claude = {
+      command = { "claude" },
+      format = function(path, start_row, end_row)
+        local mention = path:find("[^%w/_%.%-]") and ('"' .. path .. '"') or path
+        local loc = start_row and ("#L%d"):format(start_row) or ""
+        if start_row and end_row and end_row ~= start_row then
+          loc = loc .. "-" .. end_row
         end
-      })
-    })
-  }, {
-    default = {
-      codex = { command = { "codex" } },
-      claude = {
-        command = { "claude" },
-        format = function(path, start_row, end_row)
-          local mention = path:find("[^%w/_%.%-]") and ('"' .. path .. '"') or path
-          local loc = start_row and ("#L%d"):format(start_row) or ""
-          if start_row and end_row and end_row ~= start_row then
-            loc = loc .. "-" .. end_row
-          end
-          return "@" .. mention .. loc
-        end
-      }
-    }
-  }),
-  keymaps = Schema.object({ [Schema.string()] = Schema.array("string") }, { default = { close = { "<C-.>" } } }),
-  actions = Schema.object({ [Schema.string()] = Schema.func() }, { default = actions }),
-  prompts = Schema.object({ [Schema.string()] = Schema.string() }, {
-    default = {
-      ["{file}"] = "{file} ",
-      ["{line}"] = "{line} "
-    }
-  }),
-  resolvers = Schema.object({ [Schema.string()] = Schema.func() }, {
-    default = {
-      file = function(agent, reference)
-        return agent:eval({ path = reference.path })
-      end,
-      line = function(agent, reference)
-        return agent:eval(reference)
+        return "@" .. mention .. loc
       end
     }
-  }),
-  view = Schema.object({
-    width = Schema.number(),
-    height = Schema.number(),
-    border = Schema.string()
-  }, {
-    default = { width = 0.9, height = 0.9, border = "rounded" }
-  })
-})
+  },
+  keymaps = { close = { "<C-.>" } },
+  actions = actions,
+  prompts = { ["{file}"] = "{file} ", ["{line}"] = "{line} " },
+  resolvers = {
+    file = function(agent, reference)
+      return agent:eval({ path = reference.path })
+    end,
+    line = function(agent, reference)
+      return agent:eval(reference)
+    end
+  },
+  view = { width = 0.9, height = 0.9, border = "rounded" }
+}
 
-local options = assert(Schema.resolve(schema, {}, "pigeon"))
+local options = vim.deepcopy(defaults)
 
 function M.setup(opts)
-  local config, reason = Schema.resolve(schema, opts or {}, "pigeon")
-  if config == nil then
-    return false, reason
+  local config = vim.deepcopy(vim.tbl_deep_extend("force", defaults, opts or {}))
+  for _, tool in pairs(config.tools) do
+    if tool.format == nil then
+      tool.format = format_reference
+    end
   end
   options = config
-  return true, nil
+  return true
 end
 
 return setmetatable(M, {

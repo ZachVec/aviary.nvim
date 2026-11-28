@@ -18,29 +18,10 @@ describe("Hawk Review options", function()
     assert.are.same({ "X" }, config().keymaps.toggle_all)
   end)
 
-  it("rejects unknown options and invalid shapes without changing the current config", function()
-    config.setup({ keymaps = { hawk = { "o" } } })
-    local before, saved = config(), vim.deepcopy(config())
-    for _, case in ipairs({
-      { options = { keympas = {} }, reason = "unknown option keympas" },
-      { options = { keymaps = false }, reason = "keymaps must be a table" },
-      { options = { keymaps = { hawk = "o" } }, reason = "keymaps.hawk must be an array" },
-      { options = { actions = { bad = true } }, reason = "actions.bad must be a function" },
-    }) do
-      local ok, message = config.setup(case.options)
-      assert.is_false(ok)
-      assert.are.equal("hawk: " .. case.reason, message)
-      assert.are.equal(before, config())
-      assert.are.same(saved, config())
-    end
-  end)
-
-  it("provides handlers for default mappings and accepts structurally valid keymaps", function()
+  it("provides handlers for the default keymaps", function()
     for action in pairs(config().keymaps) do
       assert.is_function(config().actions[action])
     end
-    assert.is_true(config.setup({ keymaps = { missing_handler = { "<Tab>" } } }))
-    assert.are.same({ "<Tab>" }, config().keymaps.missing_handler)
   end)
 
   it("accepts custom actions alongside built-ins", function()
