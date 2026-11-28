@@ -101,6 +101,28 @@ describe("pigeon tmux backend", function()
     assert.is_nil(first_label:find(first.session, 1, true))
   end)
 
+  it("orders Agents by launch cwd and promotes the current Agent and its directory", function()
+    local Backends = require("aviary.pigeon.backends")
+    local function create_in(name)
+      local directory = socket_dir .. "/" .. name
+      vim.fn.mkdir(directory, "p")
+      vim.api.nvim_set_current_dir(directory)
+      return create()
+    end
+    local function choice_ids(current)
+      return vim.tbl_map(function(choice)
+        return choice:id()
+      end, Backends.list(current))
+    end
+
+    local last = create_in("z")
+    local peer = create_in("middle")
+    local first = create_in("a")
+    local current = create_in("middle")
+    assert.are.same({ first:id(), peer:id(), current:id(), last:id(), "claude", "codex", "test" }, choice_ids())
+    assert.are.same({ current:id(), peer:id(), first:id(), last:id(), "claude", "codex", "test" }, choice_ids(current))
+  end)
+
   it("preserves literal Unicode, separators, format syntax and trailing semicolons in discovery", function()
     local directory = vim.fn.tempname() .. " 路径\tline\r\n#{session_name};"
     vim.fn.mkdir(directory, "p")

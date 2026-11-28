@@ -12,24 +12,26 @@
 
 --- An Agent is also a Choice and returns itself from materialize().
 ---@class aviary.pigeon.Agent: aviary.pigeon.Choice
+---@field cwd string absolute launch working directory
 ---@field attach fun(self: self): string[] command that directly attaches one client to this Agent's session
 ---@field retarget fun(self: self, client: string) move an existing client to this Agent; raises on failure
 ---@field eval fun(self: self, reference: aviary.pigeon.Reference): string render the borrowed reference in this Agent's context; raises on failure
 ---@field send fun(self: self, text: string) deliver without focusing or submitting; empty text is ignored
 
+--- list() orders Agents by launch cwd, followed by creation Choices. When given
+--- the current Agent, it places that Agent first if listed, then other Agents
+--- with the same cwd, then proceeds in cwd order.
 ---@class aviary.pigeon.Backend
----@field list fun(): aviary.pigeon.Choice[] current inventory, including supported tool creation choices
+---@field list fun(current?: aviary.pigeon.Agent): aviary.pigeon.Choice[]
 ---@field current fun(client: string): aviary.pigeon.Agent resolve the Agent displayed by client; raises when the client is not attached to a Pigeon Agent
 
----@class aviary.pigeon.Backends
----@field list fun(): aviary.pigeon.Choice[] current inventory from the configured backend
----@field current fun(client: string): aviary.pigeon.Agent resolve the Agent displayed by client from the configured backend
+---@class aviary.pigeon.Backends: aviary.pigeon.Backend
 ---@field checkhealth fun(name: aviary.pigeon.BackendName) run read-only backend diagnostics
 local M = {}
 
-function M.list()
+function M.list(current)
   local name = require("aviary.pigeon.config")().backend
-  return require("aviary.pigeon.backends." .. name).list()
+  return require("aviary.pigeon.backends." .. name).list(current)
 end
 
 function M.current(client)

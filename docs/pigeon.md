@@ -247,8 +247,9 @@ existing Agents and creation choices in `vim.ui.select` when no Terminal exists;
 the built-in `pick` action lists them when a Terminal is attached. A single
 candidate is still passed to the configured picker. Entries begin with
 ` <tool>` to create an instance or ` <tool> <launch cwd> [<tag>]` to
-reuse an Agent; `<tag>` is the Agent's tmux pane id. The pick action places the
-current Agent first with `[current]`.
+reuse an Agent. The tag is the Agent's tmux pane id. Existing Agents are sorted
+by launch cwd, followed by creation choices. The pick action puts the current
+Agent first with `[current]`, followed by other Agents with the same launch cwd.
 Discovery includes only Pigeon Agents on Neovim's host tmux server whose tool
 names exist in local configuration. Renaming a tmux window does not change an
 Agent's identity or formatter.

@@ -133,14 +133,8 @@ local defaults = {
         local client = vim.api.nvim_get_chan_info(vim.b.terminal_job_id).pty
         local agent = current()
         local current_id = agent:id()
-        local choices = require("aviary.pigeon.backends").list()
+        local choices = require("aviary.pigeon.backends").list(agent)
         assert(#choices > 0, "no Pigeon Agents or supported tools available")
-        for index, choice in ipairs(choices) do
-          if choice:id() == current_id then
-            table.insert(choices, 1, table.remove(choices, index))
-            break
-          end
-        end
         vim.ui.select(
           choices,
           {
