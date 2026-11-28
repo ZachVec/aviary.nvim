@@ -102,9 +102,6 @@ function M.list()
       seen[record.session], result[#result + 1] = true, record
     end
   end
-  table.sort(result, function(a, b)
-    return a.session < b.session
-  end)
   return result
 end
 

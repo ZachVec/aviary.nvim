@@ -11,6 +11,7 @@ describe("aviary.pigeon Terminal routing", function()
 
   local function agent(name)
     local self = {
+      cwd = "/",
       retargets = {},
       eval = function(_, reference)
         local text = reference.path
@@ -149,13 +150,13 @@ describe("aviary.pigeon Terminal routing", function()
     end)
   end
 
-  it("switches through the pick action, reuses one Terminal, and pins the current Agent by id", function()
+  it("switches through the pick action, reuses one Terminal, and marks the current Agent by id", function()
     assert.is_true(Pigeon.setup({ keymaps = { pick = { "<F5>" } } }))
     attach()
+    current_agent = agent("first")
     local before = assert(terminal_state())
     assert.are.equal(1, #terminal_buffers())
     pick_action()
-    assert.are.equal(first, choices[1])
     assert.are.equal("first [current]", options.format_item(first))
     choose(second)
     current_agent = second

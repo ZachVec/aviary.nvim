@@ -24,7 +24,7 @@ local ToolChoice = {}
 ToolChoice.__index = ToolChoice
 
 ---@class aviary.pigeon.backends.tmux: aviary.pigeon.Backend
----@field list fun(): table<integer, aviary.pigeon.tmux.Agent|aviary.pigeon.tmux.ToolChoice> configured Agents, then sorted creation choices
+---@field list fun(current?: aviary.pigeon.Agent): table<integer, aviary.pigeon.tmux.Agent|aviary.pigeon.tmux.ToolChoice>
 ---@field current fun(client: string): aviary.pigeon.tmux.Agent Agent displayed by client; raises when the client is not attached to a Pigeon Agent
 local M = {}
 
@@ -81,11 +81,27 @@ function M.current(client)
   return setmetatable(Cli.current(client), Agent) --[[@as aviary.pigeon.tmux.Agent]]
 end
 
-function M.list()
+function M.list(current)
   ---@type table<integer, aviary.pigeon.tmux.Agent|aviary.pigeon.tmux.ToolChoice>
   local choices = {}
   local config = Config()
-  for _, record in ipairs(Cli.list()) do
+  local current_id, current_cwd = current and current:id(), current and current.cwd
+  local records = Cli.list()
+  table.sort(records, function(a, b)
+    local a_current, b_current = a.pane == current_id, b.pane == current_id
+    if a_current ~= b_current then
+      return a_current
+    end
+    local a_same_cwd, b_same_cwd = a.cwd == current_cwd, b.cwd == current_cwd
+    if a_same_cwd ~= b_same_cwd then
+      return a_same_cwd
+    end
+    if a.cwd ~= b.cwd then
+      return a.cwd < b.cwd
+    end
+    return a.session < b.session
+  end)
+  for _, record in ipairs(records) do
     if config.tools[record.tool] then
       choices[#choices + 1] = setmetatable(record, Agent) --[[@as aviary.pigeon.tmux.Agent]]
     end

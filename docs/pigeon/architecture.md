@@ -59,10 +59,11 @@ resolvers receive the Agent and may do the same. The asynchronous selector
 callback renders all content before one `agent:send`, wrapped in
 [protect](../../lua/aviary/shared/protect.lua).
 
-The built-in pick action resolves the current Agent, lists Choices with
-`Backends.list`, and pins the current Agent in the selector. After confirmation,
-it materializes the selected Choice and asks the resulting Agent to move the
-Terminal's client. It reads the client from the buffer-local terminal job
+The built-in pick action passes the resolved current Agent to `Backends.list`
+so the backend can prioritize that Agent and its launch cwd. The selector marks
+the current Agent. After confirmation, the action materializes the selected
+Choice and asks the resulting Agent to move the Terminal's client.
+It reads the client from the buffer-local terminal job
 and does not create a Terminal or change focus. Picker discovery and
 the asynchronous selector callback are wrapped in
 [protect](../../lua/aviary/shared/protect.lua); resolution failure warns once and
