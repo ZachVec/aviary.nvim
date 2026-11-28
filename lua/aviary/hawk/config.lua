@@ -15,114 +15,94 @@ local M = {}
 ---@field keymaps aviary.hawk.config.Keymaps action name to complete key set
 ---@field actions aviary.hawk.config.Actions defaults, overrides and user-defined handlers
 
+local Schema = require("aviary.shared.schema")
+
+---@type aviary.hawk.config.Actions
+local actions = {}
+
+function actions.close(tab)
+  tab:close()
+end
+
+function actions.hawk(tab)
+  local row, lnum = tab:current()
+  if row.kind == "diff" then
+    row:jump(tab)
+    return
+  end
+  ---@param value? string
+  local function confirm(value)
+    if value ~= nil then
+      row:edit(value)
+      tab:render(lnum - 1, lnum)
+    end
+  end
+  if row.input.kind == "choice" then
+    vim.ui.select(row.input.choices, {
+      format_item = function(item)
+        return item == row.value and (item .. " [current]") or item
+      end,
+    }, confirm)
+  else
+    vim.ui.input({ default = row.value }, confirm)
+  end
+end
+
+function actions.refresh(tab)
+  tab:refresh()
+end
+
+function actions.toggle_all(tab)
+  local rows, all = {}, true
+  for _, row in tab:changes() do
+    rows[#rows + 1] = row
+    all = all and row.checked
+  end
+  if #rows == 0 then
+    return
+  end
+  for _, row in ipairs(rows) do
+    if row.checked == all then
+      row:toggle_check()
+    end
+  end
+  tab:render(0, -1)
+end
+
+function actions.toggle_check(tab)
+  local row, lnum = tab:current()
+  if row.kind == "diff" then
+    row:toggle_check()
+    tab:render(lnum - 1, lnum)
+  end
+end
+
+-- stylua: ignore
+local schema = Schema.object({
+  keymaps = Schema.object({ [Schema.string()] = Schema.array("string") }, {
+    default = {
+      close = { "q" },
+      hawk = { "<CR>" },
+      refresh = { "r" },
+      toggle_all = { "X" },
+      toggle_check = { "x" }
+    }
+  }),
+  actions = Schema.object({ [Schema.string()] = Schema.func() }, { default = actions })
+})
+
 ---@type aviary.hawk.config.Config
-local defaults = {
-  keymaps = {
-    close = { "q" },
-    hawk = { "<CR>" },
-    refresh = { "r" },
-    toggle_all = { "X" },
-    toggle_check = { "x" },
-  },
-  actions = {
-    close = function(tab)
-      tab:close()
-    end,
-    hawk = function(tab)
-      local row, lnum = tab:current()
-      if row.kind == "diff" then
-        row:jump(tab)
-        return
-      end
-      ---@param value? string
-      local function confirm(value)
-        if value ~= nil then
-          row:edit(value)
-          tab:render(lnum - 1, lnum)
-        end
-      end
-      if row.input.kind == "choice" then
-        vim.ui.select(row.input.choices, {
-          format_item = function(item)
-            return item == row.value and (item .. " [current]") or item
-          end,
-        }, confirm)
-      else
-        vim.ui.input({ default = row.value }, confirm)
-      end
-    end,
-    refresh = function(tab)
-      tab:refresh()
-    end,
-    toggle_all = function(tab)
-      local rows, all = {}, true
-      for _, row in tab:changes() do
-        rows[#rows + 1] = row
-        all = all and row.checked
-      end
-      if #rows == 0 then
-        return
-      end
-      for _, row in ipairs(rows) do
-        if row.checked == all then
-          row:toggle_check()
-        end
-      end
-      tab:render(0, -1)
-    end,
-    toggle_check = function(tab)
-      local row, lnum = tab:current()
-      if row.kind == "diff" then
-        row:toggle_check()
-        tab:render(lnum - 1, lnum)
-      end
-    end,
-  },
-}
-local options = vim.deepcopy(defaults)
+local options = assert(Schema.resolve(schema, {}, "hawk"))
 
 ---@param opts? aviary.hawk.config.Options
 ---@return boolean ok
----@return string? message validation failure; previous options remain unchanged
+---@return string? message validation failure leaves previous options unchanged
 function M.setup(opts)
-  if opts == nil then
-    opts = {}
+  local config, reason = Schema.resolve(schema, opts or {}, "hawk")
+  if config == nil then
+    return false, reason
   end
-  if type(opts) ~= "table" then
-    return false, "hawk: options must be a table"
-  end
-  for key in pairs(opts) do
-    if defaults[key] == nil then
-      return false, "hawk: unknown option " .. tostring(key)
-    end
-  end
-  local cfg = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts)
-  if type(cfg.keymaps) ~= "table" or type(cfg.actions) ~= "table" then
-    return false, "hawk: keymaps and actions must be tables"
-  end
-  -- Deep merge extends arrays; key sets instead replace their defaults.
-  for action, keys in pairs(opts.keymaps or {}) do
-    cfg.keymaps[action] = vim.deepcopy(keys)
-  end
-  for action, keys in pairs(cfg.keymaps) do
-    if type(action) ~= "string" or type(keys) ~= "table" or not vim.islist(keys) then
-      return false, "hawk: keymaps must map actions to lists of keys"
-    end
-    for _, key in ipairs(keys) do
-      if type(key) ~= "string" or key == "" then
-        return false, "hawk: keys must be non-empty strings"
-      end
-    end
-    if type(cfg.actions[action]) ~= "function" then
-      return false, "hawk: no handler for " .. action
-    end
-  end
-  for action, handler in pairs(cfg.actions) do
-    if type(action) ~= "string" or type(handler) ~= "function" then
-      return false, "hawk: actions must map names to functions"
-    end
-  end
-  options = cfg
+  options = config
   return true, nil
 end
 

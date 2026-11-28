@@ -50,10 +50,9 @@ end
 
 function Agent:eval(reference)
   assert(reference.path ~= "", "reference has no filename")
-  local config = Config()
-  local tool = assert(config.tools[self.tool], "missing local tool definition: " .. self.tool)
+  local tool = assert(Config().tools[self.tool], "missing local tool definition: " .. self.tool)
   local path = Path.relpath(self.cwd, reference.path)
-  local text = (tool.format or config.format)(path, reference.start_row, reference.end_row)
+  local text = tool.format(path, reference.start_row, reference.end_row)
   assert(type(text) == "string" and text ~= "", "reference could not be formatted: " .. reference.path)
   return text
 end
